@@ -355,7 +355,25 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                       </form>
                     </div>
                   </header>
-                  <p class="suggestion-card__body"><?= nl2br(htmlspecialchars($suggestion['content'], ENT_QUOTES)) ?></p>
+                  <?php $contentId = 'suggestion-content-' . $suggestionId; ?>
+                  <div class="suggestion-card__body" data-collapsible data-collapsible-height="240">
+                    <div
+                      class="suggestion-card__body-content"
+                      id="<?= htmlspecialchars($contentId, ENT_QUOTES) ?>"
+                      data-collapsible-content
+                    ><?= nl2br(htmlspecialchars($suggestion['content'], ENT_QUOTES)) ?></div>
+                    <button
+                      class="suggestion-card__toggle"
+                      type="button"
+                      data-collapsible-toggle
+                      aria-expanded="false"
+                      aria-controls="<?= htmlspecialchars($contentId, ENT_QUOTES) ?>"
+                      hidden
+                    >
+                      <span class="suggestion-card__toggle-text suggestion-card__toggle-text--more">Show more</span>
+                      <span class="suggestion-card__toggle-text suggestion-card__toggle-text--less">Show less</span>
+                    </button>
+                  </div>
 
                   <div class="reply-thread" data-replies-for="<?= $suggestionId ?>">
                     <?php foreach ($suggestion['replies'] as $reply): ?>
@@ -511,7 +529,25 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                           <button class="button button--primary" type="submit">Update suggestion</button>
                         </form>
                       <?php endif; ?>
-                    <p class="suggestion-card__body"><?= nl2br(htmlspecialchars($suggestion['content'], ENT_QUOTES)) ?></p>
+                    <?php $contentId = 'suggestion-content-' . $studentSuggestionId; ?>
+                    <div class="suggestion-card__body" data-collapsible data-collapsible-height="240">
+                      <div
+                        class="suggestion-card__body-content"
+                        id="<?= htmlspecialchars($contentId, ENT_QUOTES) ?>"
+                        data-collapsible-content
+                      ><?= nl2br(htmlspecialchars($suggestion['content'], ENT_QUOTES)) ?></div>
+                      <button
+                        class="suggestion-card__toggle"
+                        type="button"
+                        data-collapsible-toggle
+                        aria-expanded="false"
+                        aria-controls="<?= htmlspecialchars($contentId, ENT_QUOTES) ?>"
+                        hidden
+                      >
+                        <span class="suggestion-card__toggle-text suggestion-card__toggle-text--more">Show more</span>
+                        <span class="suggestion-card__toggle-text suggestion-card__toggle-text--less">Show less</span>
+                      </button>
+                    </div>
 
                     <div class="reply-thread" data-replies-for="<?= $studentSuggestionId ?>">
                       <?php foreach ($suggestion['replies'] as $reply): ?>
@@ -538,6 +574,24 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
           var dashboard = document.querySelector('.dashboard');
           if (!dashboard) {
             return;
+          }
+          var DEFAULT_COLLAPSED_HEIGHT = 240;
+          var collapsibleItems = initCollapsibleCards(dashboard);
+          var resizeTimerId = null;
+
+          if (collapsibleItems.length) {
+            scheduleCollapsibleEvaluation(collapsibleItems);
+
+            window.addEventListener('resize', function () {
+              if (resizeTimerId !== null) {
+                window.clearTimeout(resizeTimerId);
+              }
+
+              resizeTimerId = window.setTimeout(function () {
+                scheduleCollapsibleEvaluation(collapsibleItems);
+                resizeTimerId = null;
+              }, 150);
+            });
           }
 
           var role = dashboard.getAttribute('data-role') || 'student';
@@ -696,6 +750,125 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                 isFetching = false;
                 scheduleNextPoll(pollDelay);
               });
+          }
+
+          function scheduleCollapsibleEvaluation(items) {
+            if (!items || !items.length) {
+              return;
+            }
+
+            var raf = window.requestAnimationFrame;
+
+            if (typeof raf === 'function') {
+              raf(function () {
+                evaluateCollapsibleItems(items);
+              });
+            } else {
+              window.setTimeout(function () {
+                evaluateCollapsibleItems(items);
+              }, 0);
+            }
+          }
+
+          function evaluateCollapsibleItems(items) {
+            for (var i = 0; i < items.length; i += 1) {
+              var item = items[i];
+
+              if (!item || !item.container || !item.content || !item.toggle) {
+                continue;
+              }
+
+              var collapsedHeight = typeof item.collapsedHeight === 'number' && item.collapsedHeight > 0
+                ? item.collapsedHeight
+                : DEFAULT_COLLAPSED_HEIGHT;
+
+              if (item.content.scrollHeight <= collapsedHeight + 4) {
+                item.toggle.hidden = true;
+
+                if (item.state !== 'expanded') {
+                  item.state = 'expanded';
+                }
+
+                applyCollapsibleState(item);
+                continue;
+              }
+
+              item.toggle.hidden = false;
+
+              if (item.state !== 'expanded' && item.state !== 'collapsed') {
+                item.state = 'collapsed';
+              }
+
+              applyCollapsibleState(item);
+            }
+          }
+
+          function applyCollapsibleState(item) {
+            if (!item || !item.container || !item.toggle) {
+              return;
+            }
+
+            var state = item.state === 'collapsed' ? 'collapsed' : 'expanded';
+            item.container.setAttribute('data-collapsible-state', state);
+            item.toggle.setAttribute('aria-expanded', state === 'expanded' ? 'true' : 'false');
+          }
+
+          function initCollapsibleCards(root) {
+            var containers = root.querySelectorAll('[data-collapsible]');
+
+            if (!containers.length) {
+              return [];
+            }
+
+            var items = [];
+
+            for (var i = 0; i < containers.length; i += 1) {
+              var container = containers[i];
+              var content = container.querySelector('[data-collapsible-content]');
+              var toggle = container.querySelector('[data-collapsible-toggle]');
+
+              if (!content || !toggle) {
+                continue;
+              }
+
+              var collapsedHeight = parseCollapsedHeight(container.getAttribute('data-collapsible-height'));
+              container.style.setProperty('--collapsible-collapsed-height', collapsedHeight + 'px');
+
+              var item = {
+                container: container,
+                content: content,
+                toggle: toggle,
+                collapsedHeight: collapsedHeight,
+                state: null
+              };
+
+              (function (currentItem) {
+                toggle.addEventListener('click', function () {
+                  currentItem.state = currentItem.state === 'collapsed' ? 'expanded' : 'collapsed';
+                  applyCollapsibleState(currentItem);
+                });
+              })(item);
+
+              items.push(item);
+            }
+
+            return items;
+          }
+
+          function parseCollapsedHeight(value) {
+            var fallback = DEFAULT_COLLAPSED_HEIGHT;
+
+            if (!value) {
+              return fallback;
+            }
+
+            var parsed = parseInt(value, 10);
+
+            if (isNaN(parsed) || parsed <= 0) {
+              return fallback;
+            }
+
+            return parsed;
           }
 
           scheduleNextPoll(3000);
