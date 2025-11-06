@@ -25,7 +25,6 @@ CREATE TABLE `users` (
 CREATE TABLE `suggestions` (
     `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     `student_id` INT UNSIGNED NOT NULL,
-    `title` VARCHAR(190) NOT NULL,
     `content` TEXT NOT NULL,
     `is_anonymous` TINYINT(1) NOT NULL DEFAULT 0,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
