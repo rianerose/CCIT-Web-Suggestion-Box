@@ -1,0 +1,218 @@
+body.landing {
+  min-height: 100vh;
+  background: url(images/bg-landing.png) center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-body);
+  line-height: 1.6;
+}
+
+.landing__container {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.landing__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.landing__brand {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 1rem;
+}
+
+.landing__nav {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.link {
+  position: relative;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  padding-bottom: 0.25rem;
+  transition: color var(--transition-fast);
+}
+
+.link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--color-border);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--transition-fast);
+}
+
+.link:hover,
+.link:focus-visible {
+  color: var(--color-text-primary);
+}
+
+.link:hover::after,
+.link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.landing__main {
+  display: grid;
+  gap: 4rem;
+}
+
+.hero {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.hero__title {
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 600;
+  line-height: 1.1;
+  color: #FFFFFF;
+}
+
+.hero__subtitle {
+  max-width: 36rem;
+  color: #FFFFFF;
+}
+
+.hero__actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.hero__note {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  letter-spacing: 0.02em;
+  transition: transform var(--transition-fast),
+    box-shadow var(--transition-fast), background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.button--primary {
+  background: var(--color-text-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-text-primary);
+}
+
+.button--primary:hover,
+.button--primary:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.button--ghost {
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+.button--ghost:hover,
+.button--ghost:focus-visible {
+  background: var(--color-surface);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.alert {
+  border-radius: var(--radius-sm);
+  padding: 0.85rem 1.25rem;
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.alert--success {
+  background: var(--color-success-bg);
+}
+
+.landing__alert {
+  max-width: 28rem;
+}
+
+.features {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.feature-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 1.75rem;
+  display: grid;
+  gap: 0.75rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.feature-card__title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.feature-card__text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.landing__footer {
+  border-top: 1px solid var(--color-border-light);
+  padding-top: 1.5rem;
+  text-align: center;
+}
+
+.landing__footer-text {
+  font-size: var(--font-size-sm);
+  color: #FFFFFF;
+}
+
+@media (max-width: 640px) {
+  .landing__header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .landing__nav {
+    gap: 1rem;
+  }
+
+  .hero__actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .button {
+    width: 100%;
+  }
+}
