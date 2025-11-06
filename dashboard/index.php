@@ -10,6 +10,41 @@ if (!function_exists('build_dashboard_index_url')) {
     }
 }
 
+if (!function_exists('render_collapsible_suggestion_body')) {
+    /**
+     * @param int $suggestionId
+     * @param string $content
+     * @param int $collapsedHeight
+     */
+    function render_collapsible_suggestion_body(int $suggestionId, string $content, int $collapsedHeight = 240): void
+    {
+        $contentId = 'suggestion-content-' . $suggestionId;
+        $contentMarkup = nl2br(htmlspecialchars($content, ENT_QUOTES));
+        $safeContentId = htmlspecialchars($contentId, ENT_QUOTES);
+        $heightAttribute = htmlspecialchars((string) $collapsedHeight, ENT_QUOTES);
+        ?>
+        <div class="suggestion-card__body" data-collapsible data-collapsible-height="<?= $heightAttribute ?>">
+          <div
+            class="suggestion-card__body-content"
+            id="<?= $safeContentId ?>"
+            data-collapsible-content
+          ><?= $contentMarkup ?></div>
+          <button
+            class="suggestion-card__toggle"
+            type="button"
+            data-collapsible-toggle
+            aria-expanded="false"
+            aria-controls="<?= $safeContentId ?>"
+            hidden
+          >
+            <span class="suggestion-card__toggle-text suggestion-card__toggle-text--more">Show more</span>
+            <span class="suggestion-card__toggle-text suggestion-card__toggle-text--less">Show less</span>
+          </button>
+        </div>
+        <?php
+    }
+}
+
 /** @var array{id: int, username: string, full_name: string, role: string} $currentUser */
 $currentUser = $_SESSION['user'];
 $isAdmin = $currentUser['role'] === 'admin';
@@ -355,25 +390,7 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                       </form>
                     </div>
                   </header>
-                  <?php $contentId = 'suggestion-content-' . $suggestionId; ?>
-                  <div class="suggestion-card__body" data-collapsible data-collapsible-height="240">
-                    <div
-                      class="suggestion-card__body-content"
-                      id="<?= htmlspecialchars($contentId, ENT_QUOTES) ?>"
-                      data-collapsible-content
-                    ><?= nl2br(htmlspecialchars($suggestion['content'], ENT_QUOTES)) ?></div>
-                    <button
-                      class="suggestion-card__toggle"
-                      type="button"
-                      data-collapsible-toggle
-                      aria-expanded="false"
-                      aria-controls="<?= htmlspecialchars($contentId, ENT_QUOTES) ?>"
-                      hidden
-                    >
-                      <span class="suggestion-card__toggle-text suggestion-card__toggle-text--more">Show more</span>
-                      <span class="suggestion-card__toggle-text suggestion-card__toggle-text--less">Show less</span>
-                    </button>
-                  </div>
+                    <?php render_collapsible_suggestion_body($suggestionId, (string) $suggestion['content']); ?>
 
                   <div class="reply-thread" data-replies-for="<?= $suggestionId ?>">
                     <?php foreach ($suggestion['replies'] as $reply): ?>
@@ -529,25 +546,7 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                           <button class="button button--primary" type="submit">Update suggestion</button>
                         </form>
                       <?php endif; ?>
-                    <?php $contentId = 'suggestion-content-' . $studentSuggestionId; ?>
-                    <div class="suggestion-card__body" data-collapsible data-collapsible-height="240">
-                      <div
-                        class="suggestion-card__body-content"
-                        id="<?= htmlspecialchars($contentId, ENT_QUOTES) ?>"
-                        data-collapsible-content
-                      ><?= nl2br(htmlspecialchars($suggestion['content'], ENT_QUOTES)) ?></div>
-                      <button
-                        class="suggestion-card__toggle"
-                        type="button"
-                        data-collapsible-toggle
-                        aria-expanded="false"
-                        aria-controls="<?= htmlspecialchars($contentId, ENT_QUOTES) ?>"
-                        hidden
-                      >
-                        <span class="suggestion-card__toggle-text suggestion-card__toggle-text--more">Show more</span>
-                        <span class="suggestion-card__toggle-text suggestion-card__toggle-text--less">Show less</span>
-                      </button>
-                    </div>
+                      <?php render_collapsible_suggestion_body($studentSuggestionId, (string) $suggestion['content']); ?>
 
                     <div class="reply-thread" data-replies-for="<?= $studentSuggestionId ?>">
                       <?php foreach ($suggestion['replies'] as $reply): ?>
@@ -669,44 +668,48 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
           var isFetching = false;
           var pollDelay = 10000;
 
-          function scheduleNextPoll(delay) {
-            window.setTimeout(poll, delay);
-          }
-
-          function updateCard(suggestion) {
-            var key = String(suggestion.id);
-            var entry = suggestionMap[key];
-
-            if (!entry || !entry.replies) {
-              return;
+            function scheduleNextPoll(delay) {
+              window.setTimeout(poll, delay);
             }
 
-            var repliesHtml = '';
+            function updateCard(suggestion) {
+              var key = String(suggestion.id);
+              var entry = suggestionMap[key];
 
-            if (Array.isArray(suggestion.replies) && suggestion.replies.length) {
-              var rendered = [];
-              for (var j = 0; j < suggestion.replies.length; j += 1) {
-                var reply = suggestion.replies[j];
-                if (role === 'admin') {
-                  rendered.push(renderAdminReply(reply));
+              if (!entry || !entry.replies) {
+                return;
+              }
+
+              var repliesHtml = '';
+
+              if (Array.isArray(suggestion.replies) && suggestion.replies.length) {
+                var rendered = [];
+                for (var j = 0; j < suggestion.replies.length; j += 1) {
+                  var reply = suggestion.replies[j];
+                  if (role === 'admin') {
+                    rendered.push(renderAdminReply(reply));
+                  } else {
+                    rendered.push(renderStudentReply(reply));
+                  }
+                }
+
+                repliesHtml = rendered.join('');
+              }
+
+              entry.replies.innerHTML = repliesHtml;
+
+              if (entry.emptyState) {
+                if (Array.isArray(suggestion.replies) && suggestion.replies.length) {
+                  entry.emptyState.setAttribute('hidden', 'hidden');
                 } else {
-                  rendered.push(renderStudentReply(reply));
+                  entry.emptyState.removeAttribute('hidden');
                 }
               }
 
-              repliesHtml = rendered.join('');
-            }
-
-            entry.replies.innerHTML = repliesHtml;
-
-            if (entry.emptyState) {
-              if (Array.isArray(suggestion.replies) && suggestion.replies.length) {
-                entry.emptyState.setAttribute('hidden', 'hidden');
-              } else {
-                entry.emptyState.removeAttribute('hidden');
+              if (collapsibleItems.length) {
+                scheduleCollapsibleEvaluation(collapsibleItems);
               }
             }
-          }
 
           function poll() {
             if (isFetching) {
@@ -782,18 +785,20 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                 ? item.collapsedHeight
                 : DEFAULT_COLLAPSED_HEIGHT;
 
-              if (item.content.scrollHeight <= collapsedHeight + 4) {
-                item.toggle.hidden = true;
+                if (item.content.scrollHeight <= collapsedHeight + 4) {
+                  if (!item.toggle.hasAttribute('hidden')) {
+                    item.toggle.setAttribute('hidden', 'hidden');
+                  }
 
-                if (item.state !== 'expanded') {
-                  item.state = 'expanded';
+                  if (item.state !== 'expanded') {
+                    item.state = 'expanded';
+                  }
+
+                  applyCollapsibleState(item);
+                  continue;
                 }
 
-                applyCollapsibleState(item);
-                continue;
-              }
-
-              item.toggle.hidden = false;
+                item.toggle.removeAttribute('hidden');
 
               if (item.state !== 'expanded' && item.state !== 'collapsed') {
                 item.state = 'collapsed';
