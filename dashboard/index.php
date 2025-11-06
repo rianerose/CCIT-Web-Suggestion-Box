@@ -27,9 +27,63 @@ $suggestionRevealIdentity = true;
 
 $replyErrors = [];
 $replyDrafts = [];
+$editSuggestionErrors = [];
+$editSuggestionDrafts = [];
+$editingSuggestionId = null;
+
+if (!$isAdmin && isset($_GET['edit'])) {
+    $editingSuggestionId = (int) $_GET['edit'];
+    if ($editingSuggestionId <= 0) {
+        $editingSuggestionId = null;
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = isset($_POST['action']) ? (string) $_POST['action'] : '';
+
     if ($isAdmin) {
+        if ($action === '') {
+            $action = 'add_reply';
+        }
+
+        if ($action === 'delete_suggestion') {
+            $suggestionId = isset($_POST['suggestion_id']) ? (int) $_POST['suggestion_id'] : 0;
+
+            if ($suggestionId <= 0) {
+                $_SESSION['flash_error'] = 'Invalid suggestion reference.';
+            } else {
+                $result = delete_suggestion_for_admin($suggestionId);
+
+                if ($result['success']) {
+                    $_SESSION['flash_success'] = 'Suggestion deleted successfully.';
+                } else {
+                    $_SESSION['flash_error'] = $result['error'] ?? 'Unable to delete suggestion. Please try again.';
+                }
+            }
+
+            header('Location: index.php');
+            exit;
+        }
+
+        if ($action === 'delete_reply') {
+            $replyId = isset($_POST['reply_id']) ? (int) $_POST['reply_id'] : 0;
+
+            if ($replyId <= 0) {
+                $_SESSION['flash_error'] = 'Invalid reply reference.';
+            } else {
+                $result = delete_suggestion_reply($replyId, $currentUser['id'], true);
+
+                if ($result['success']) {
+                    $_SESSION['flash_success'] = 'Reply deleted successfully.';
+                } else {
+                    $_SESSION['flash_error'] = $result['error'] ?? 'Unable to delete reply. Please try again.';
+                }
+            }
+
+            header('Location: index.php');
+            exit;
+        }
+
         $suggestionId = isset($_POST['suggestion_id']) ? (int) $_POST['suggestion_id'] : 0;
         $replyMessage = trim((string) ($_POST['reply_message'] ?? ''));
 
@@ -52,22 +106,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } else {
-        $suggestionTitle = trim((string) ($_POST['title'] ?? ''));
-        $suggestionContent = trim((string) ($_POST['content'] ?? ''));
-        $suggestionRevealIdentity = isset($_POST['display_identity']);
+        if ($action === '') {
+            $action = 'create_suggestion';
+        }
 
-        $result = create_suggestion($currentUser['id'], $suggestionTitle, $suggestionContent, $suggestionRevealIdentity);
+        if ($action === 'delete_suggestion') {
+            $suggestionId = isset($_POST['suggestion_id']) ? (int) $_POST['suggestion_id'] : 0;
 
-        if ($result['success']) {
-            $_SESSION['flash_success'] = 'Suggestion submitted. Thank you for sharing your ideas!';
+            if ($suggestionId <= 0) {
+                $_SESSION['flash_error'] = 'Invalid suggestion reference.';
+            } else {
+                $result = delete_suggestion_for_student($suggestionId, $currentUser['id']);
+
+                if ($result['success']) {
+                    $_SESSION['flash_success'] = 'Suggestion deleted successfully.';
+                } else {
+                    $_SESSION['flash_error'] = $result['error'] ?? 'Unable to delete suggestion. Please try again.';
+                }
+            }
+
             header('Location: index.php');
             exit;
         }
 
-        if (!empty($result['error'])) {
-            $suggestionFormErrors[] = $result['error'];
+        $suggestionTitle = trim((string) ($_POST['title'] ?? ''));
+        $suggestionContent = trim((string) ($_POST['content'] ?? ''));
+        $suggestionRevealIdentity = isset($_POST['display_identity']);
+
+        if ($action === 'update_suggestion') {
+            $suggestionId = isset($_POST['suggestion_id']) ? (int) $_POST['suggestion_id'] : 0;
+            $editingSuggestionId = $suggestionId > 0 ? $suggestionId : null;
+
+            if ($suggestionId <= 0) {
+                $_SESSION['flash_error'] = 'Invalid suggestion reference.';
+                header('Location: index.php');
+                exit;
+            }
+
+            $result = update_suggestion($suggestionId, $currentUser['id'], $suggestionTitle, $suggestionContent, $suggestionRevealIdentity);
+
+            if ($result['success']) {
+                $_SESSION['flash_success'] = 'Suggestion updated successfully.';
+                header('Location: index.php');
+                exit;
+            }
+
+            $editSuggestionErrors[$suggestionId] = [
+                !empty($result['error']) ? $result['error'] : 'Unable to update suggestion. Please try again.',
+            ];
+
+            if ($suggestionId > 0) {
+                $editSuggestionDrafts[$suggestionId] = [
+                    'title' => $suggestionTitle,
+                    'content' => $suggestionContent,
+                    'display_identity' => $suggestionRevealIdentity,
+                ];
+            }
         } else {
-            $suggestionFormErrors[] = 'Unable to submit suggestion. Please try again.';
+            $result = create_suggestion($currentUser['id'], $suggestionTitle, $suggestionContent, $suggestionRevealIdentity);
+
+            if ($result['success']) {
+                $_SESSION['flash_success'] = 'Suggestion submitted. Thank you for sharing your ideas!';
+                header('Location: index.php');
+                exit;
+            }
+
+            if (!empty($result['error'])) {
+                $suggestionFormErrors[] = $result['error'];
+            } else {
+                $suggestionFormErrors[] = 'Unable to submit suggestion. Please try again.';
+            }
         }
     }
 }
@@ -76,6 +184,31 @@ if ($isAdmin) {
     $suggestions = get_all_suggestions_for_admin();
 } else {
     $suggestions = get_student_suggestions($currentUser['id']);
+}
+
+if (!$isAdmin && $editingSuggestionId !== null) {
+    $matchedSuggestion = null;
+
+    foreach ($suggestions as $suggestion) {
+        if ((int) $suggestion['id'] === $editingSuggestionId) {
+            $matchedSuggestion = $suggestion;
+            break;
+        }
+    }
+
+    if ($matchedSuggestion === null) {
+        $_SESSION['flash_error'] = 'Suggestion not found or access denied.';
+        header('Location: index.php');
+        exit;
+    }
+
+    if (!isset($editSuggestionDrafts[$editingSuggestionId])) {
+        $editSuggestionDrafts[$editingSuggestionId] = [
+            'title' => $matchedSuggestion['title'],
+            'content' => $matchedSuggestion['content'],
+            'display_identity' => !$matchedSuggestion['is_anonymous'],
+        ];
+    }
 }
 
 $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
@@ -169,10 +302,18 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
           <?php else: ?>
             <div class="suggestion-grid">
               <?php foreach ($suggestions as $suggestion): ?>
+                  <?php $suggestionId = (int) $suggestion['id']; ?>
                 <article class="suggestion-card">
                   <header class="suggestion-card__header">
-                    <h2 class="suggestion-card__title"><?= htmlspecialchars($suggestion['title'], ENT_QUOTES) ?></h2>
-                    <span class="suggestion-card__meta">
+                      <div class="suggestion-card__title-row">
+                        <h2 class="suggestion-card__title"><?= htmlspecialchars($suggestion['title'], ENT_QUOTES) ?></h2>
+                        <form class="inline-form" method="post" onsubmit="return confirm('Delete this suggestion and all associated replies?');">
+                          <input type="hidden" name="action" value="delete_suggestion">
+                          <input type="hidden" name="suggestion_id" value="<?= $suggestionId ?>">
+                          <button class="button button--danger button--sm" type="submit">Delete suggestion</button>
+                        </form>
+                      </div>
+                      <span class="suggestion-card__meta">
                       <?php if ($suggestion['is_anonymous']): ?>
                         Submitted anonymously
                       <?php else: ?>
@@ -187,10 +328,16 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                   <?php if (!empty($suggestion['replies'])): ?>
                     <div class="reply-thread">
                       <?php foreach ($suggestion['replies'] as $reply): ?>
+                          <?php $replyId = (int) $reply['id']; ?>
                         <div class="reply">
-                          <div class="reply__meta">
+                            <div class="reply__meta">
                             <span class="reply__author">Reply from <?= htmlspecialchars($reply['admin_name'], ENT_QUOTES) ?></span>
                             <span class="reply__date"><?= htmlspecialchars(date('M j, Y g:i A', strtotime($reply['created_at'])), ENT_QUOTES) ?></span>
+                              <form class="inline-form reply__delete" method="post" onsubmit="return confirm('Delete this reply?');">
+                                <input type="hidden" name="action" value="delete_reply">
+                                <input type="hidden" name="reply_id" value="<?= $replyId ?>">
+                                <button class="button button--danger button--sm" type="submit">Delete reply</button>
+                              </form>
                           </div>
                           <p class="reply__message"><?= nl2br(htmlspecialchars($reply['message'], ENT_QUOTES)) ?></p>
                         </div>
@@ -199,6 +346,7 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                   <?php endif; ?>
 
                   <form class="reply-form" method="post" novalidate>
+                      <input type="hidden" name="action" value="add_reply">
                     <input type="hidden" name="suggestion_id" value="<?= (int) $suggestion['id'] ?>">
                     <label class="form-field">
                       <span class="form-field__label">Add a reply</span>
@@ -232,6 +380,7 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
             <?php endif; ?>
 
             <form class="suggestion-form" method="post" novalidate>
+                <input type="hidden" name="action" value="create_suggestion">
               <label class="form-field">
                 <span class="form-field__label">Title</span>
                 <input
@@ -278,6 +427,19 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
             <?php else: ?>
               <div class="suggestion-list">
                 <?php foreach ($suggestions as $suggestion): ?>
+                    <?php
+                      $studentSuggestionId = (int) $suggestion['id'];
+                      $isEditing = $editingSuggestionId === $studentSuggestionId;
+                      $editDraft = $editSuggestionDrafts[$studentSuggestionId] ?? null;
+                      if ($isEditing && $editDraft === null) {
+                          $editDraft = [
+                              'title' => $suggestion['title'],
+                              'content' => $suggestion['content'],
+                              'display_identity' => !$suggestion['is_anonymous'],
+                          ];
+                      }
+                      $editErrors = $editSuggestionErrors[$studentSuggestionId] ?? [];
+                    ?>
                   <article class="suggestion-card">
                     <header class="suggestion-card__header">
                       <h3 class="suggestion-card__title"><?= htmlspecialchars($suggestion['title'], ENT_QUOTES) ?></h3>
@@ -286,6 +448,61 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                         &nbsp;&middot;&nbsp;<?= htmlspecialchars(date('M j, Y g:i A', strtotime($suggestion['created_at'])), ENT_QUOTES) ?>
                       </span>
                     </header>
+                      <div class="suggestion-card__actions suggestion-card__actions--student">
+                        <a class="button button--ghost button--sm" href="<?= htmlspecialchars($isEditing ? 'index.php' : 'index.php?edit=' . $studentSuggestionId, ENT_QUOTES) ?>">
+                          <?= $isEditing ? 'Close edit' : 'Edit' ?>
+                        </a>
+                        <form class="inline-form" method="post" onsubmit="return confirm('Delete this suggestion? This action cannot be undone.');">
+                          <input type="hidden" name="action" value="delete_suggestion">
+                          <input type="hidden" name="suggestion_id" value="<?= $studentSuggestionId ?>">
+                          <button class="button button--danger button--sm" type="submit">Delete</button>
+                        </form>
+                      </div>
+                      <?php if ($isEditing): ?>
+                        <?php if (!empty($editErrors)): ?>
+                          <div class="alert alert--error">
+                            <?php foreach ($editErrors as $error): ?>
+                              <p><?= htmlspecialchars($error) ?></p>
+                            <?php endforeach; ?>
+                          </div>
+                        <?php endif; ?>
+                        <form class="suggestion-form suggestion-form--inline" method="post" novalidate>
+                          <input type="hidden" name="action" value="update_suggestion">
+                          <input type="hidden" name="suggestion_id" value="<?= $studentSuggestionId ?>">
+                          <label class="form-field">
+                            <span class="form-field__label">Title</span>
+                            <input
+                              class="form-field__input"
+                              type="text"
+                              name="title"
+                              value="<?= htmlspecialchars($editDraft['title'] ?? $suggestion['title'], ENT_QUOTES) ?>"
+                              maxlength="190"
+                              required
+                            >
+                          </label>
+
+                          <label class="form-field">
+                            <span class="form-field__label">Suggestion details</span>
+                            <textarea
+                              class="form-field__input form-field__input--textarea"
+                              name="content"
+                              rows="6"
+                              required><?= htmlspecialchars($editDraft['content'] ?? $suggestion['content'], ENT_QUOTES) ?></textarea>
+                          </label>
+
+                          <label class="checkbox">
+                            <input
+                              class="checkbox__input"
+                              type="checkbox"
+                              name="display_identity"
+                              <?= !empty($editDraft['display_identity']) ? 'checked' : '' ?>
+                            >
+                            <span class="checkbox__label">Display my name to administrators</span>
+                          </label>
+
+                          <button class="button button--primary" type="submit">Update suggestion</button>
+                        </form>
+                      <?php endif; ?>
                     <p class="suggestion-card__body"><?= nl2br(htmlspecialchars($suggestion['content'], ENT_QUOTES)) ?></p>
 
                     <?php if (!empty($suggestion['replies'])): ?>

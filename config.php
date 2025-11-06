@@ -17,6 +17,118 @@ if (!defined('DEFAULT_ADMIN_PASSWORD_HASH')) {
     define('DEFAULT_ADMIN_PASSWORD_HASH', '$2y$10$V.R2qDe2uSfN6MYfRomsmu9Po5x10zrG4lVTmP7bBPJXM8ENWeSyC');
 }
 
+/**
+ * @return array<string, mixed>
+ */
+function get_hosting_overrides(): array
+{
+    static $overrides = null;
+
+    if (is_array($overrides)) {
+        return $overrides;
+    }
+
+    $overrides = [];
+    $candidates = [
+        __DIR__ . '/config.hosting.php',
+        __DIR__ . '/config.local.php',
+    ];
+
+    foreach ($candidates as $file) {
+        if (!is_readable($file)) {
+            continue;
+        }
+
+        $data = include $file;
+
+        if (is_array($data)) {
+            $overrides = array_merge($overrides, $data);
+        }
+    }
+
+    return $overrides;
+}
+
+function resolve_config_value(string $primaryKey, array $aliases, string $default): string
+{
+    $overrides = get_hosting_overrides();
+    $keys = array_merge([$primaryKey], $aliases);
+
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $overrides)) {
+            $value = $overrides[$key];
+
+            if ($value === null) {
+                continue;
+            }
+
+            if (is_bool($value)) {
+                return $value ? '1' : '0';
+            }
+
+            $stringValue = trim((string) $value);
+            if ($stringValue !== '') {
+                return $stringValue;
+            }
+        }
+
+        $envValue = getenv($key);
+        if ($envValue !== false) {
+            $trimmed = trim((string) $envValue);
+            if ($trimmed !== '') {
+                return $trimmed;
+            }
+        }
+
+        if (array_key_exists($key, $_ENV)) {
+            $envEntry = $_ENV[$key];
+            if ($envEntry !== null) {
+                if (is_bool($envEntry)) {
+                    return $envEntry ? '1' : '0';
+                }
+
+                $stringValue = trim((string) $envEntry);
+                if ($stringValue !== '') {
+                    return $stringValue;
+                }
+            }
+        }
+
+        if (array_key_exists($key, $_SERVER)) {
+            $serverEntry = $_SERVER[$key];
+            if ($serverEntry !== null) {
+                if (is_bool($serverEntry)) {
+                    return $serverEntry ? '1' : '0';
+                }
+
+                $stringValue = trim((string) $serverEntry);
+                if ($stringValue !== '') {
+                    return $stringValue;
+                }
+            }
+        }
+
+        if (defined($key)) {
+            $constantValue = constant($key);
+
+            if ($constantValue === null) {
+                continue;
+            }
+
+            if (is_bool($constantValue)) {
+                return $constantValue ? '1' : '0';
+            }
+
+            $stringValue = trim((string) $constantValue);
+            if ($stringValue !== '') {
+                return $stringValue;
+            }
+        }
+    }
+
+    return $default;
+}
+
 function sanitize_username(string $username): string
 {
     return strtolower(trim($username));
@@ -37,12 +149,12 @@ function get_db_connection(): \PDO
         return $pdo;
     }
 
-    $host = getenv('DB_HOST') ?: '127.0.0.1';
-    $port = getenv('DB_PORT') ?: '3306';
-    $database = getenv('DB_NAME') ?: 'my_app';
-    $username = getenv('DB_USER') ?: 'root';
-    $password = getenv('DB_PASSWORD') ?: '';
-    $charset = 'utf8mb4';
+    $host = resolve_config_value('DB_HOST', ['MYSQL_HOST', 'DATABASE_HOST', 'SQL_HOST'], '127.0.0.1');
+    $port = resolve_config_value('DB_PORT', ['MYSQL_PORT', 'DATABASE_PORT', 'SQL_PORT'], '3306');
+    $database = resolve_config_value('DB_NAME', ['MYSQL_DB', 'MYSQL_DATABASE', 'DATABASE_NAME'], 'my_app');
+    $username = resolve_config_value('DB_USER', ['MYSQL_USER', 'MYSQL_USERNAME', 'DATABASE_USER'], 'root');
+    $password = resolve_config_value('DB_PASSWORD', ['MYSQL_PASS', 'MYSQL_PASSWORD', 'DATABASE_PASSWORD'], '');
+    $charset = resolve_config_value('DB_CHARSET', ['MYSQL_CHARSET'], 'utf8mb4');
 
     $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=%s', $host, $port, $database, $charset);
 
@@ -268,6 +380,106 @@ function create_suggestion(int $studentId, string $title, string $content, bool 
     ]);
 
     return ['success' => true, 'suggestion_id' => (int) $pdo->lastInsertId()];
+}
+
+/**
+ * @return array{success: bool, error?: string}
+ */
+function update_suggestion(int $suggestionId, int $studentId, string $title, string $content, bool $displayIdentity): array
+{
+    $title = trim($title);
+    $content = trim($content);
+
+    if ($title === '') {
+        return ['success' => false, 'error' => 'Title is required.'];
+    }
+
+    if ($content === '') {
+        return ['success' => false, 'error' => 'Suggestion details are required.'];
+    }
+
+    $pdo = get_db_connection();
+
+    $exists = $pdo->prepare('SELECT student_id FROM suggestions WHERE id = :id LIMIT 1');
+    $exists->execute(['id' => $suggestionId]);
+
+    $row = $exists->fetch();
+
+    if ($row === false || (int) $row['student_id'] !== $studentId) {
+        return ['success' => false, 'error' => 'Suggestion not found or access denied.'];
+    }
+
+    $update = $pdo->prepare('UPDATE suggestions SET title = :title, content = :content, is_anonymous = :is_anonymous WHERE id = :id');
+    $update->execute([
+        'id' => $suggestionId,
+        'title' => $title,
+        'content' => $content,
+        'is_anonymous' => $displayIdentity ? 0 : 1,
+    ]);
+
+    return ['success' => true];
+}
+
+/**
+ * @return array{success: bool, error?: string}
+ */
+function delete_suggestion_for_student(int $suggestionId, int $studentId): array
+{
+    $pdo = get_db_connection();
+
+    $delete = $pdo->prepare('DELETE FROM suggestions WHERE id = :id AND student_id = :student_id');
+    $delete->execute([
+        'id' => $suggestionId,
+        'student_id' => $studentId,
+    ]);
+
+    if ($delete->rowCount() === 0) {
+        return ['success' => false, 'error' => 'Suggestion not found or access denied.'];
+    }
+
+    return ['success' => true];
+}
+
+/**
+ * @return array{success: bool, error?: string}
+ */
+function delete_suggestion_for_admin(int $suggestionId): array
+{
+    $pdo = get_db_connection();
+
+    $delete = $pdo->prepare('DELETE FROM suggestions WHERE id = :id');
+    $delete->execute(['id' => $suggestionId]);
+
+    if ($delete->rowCount() === 0) {
+        return ['success' => false, 'error' => 'Suggestion not found.'];
+    }
+
+    return ['success' => true];
+}
+
+/**
+ * @return array{success: bool, error?: string}
+ */
+function delete_suggestion_reply(int $replyId, ?int $adminId = null, bool $allowAnyAdmin = false): array
+{
+    $pdo = get_db_connection();
+
+    $conditions = 'id = :id';
+    $params = ['id' => $replyId];
+
+    if (!$allowAnyAdmin) {
+        $conditions .= ' AND admin_id = :admin_id';
+        $params['admin_id'] = $adminId;
+    }
+
+    $delete = $pdo->prepare(sprintf('DELETE FROM suggestion_replies WHERE %s', $conditions));
+    $delete->execute($params);
+
+    if ($delete->rowCount() === 0) {
+        return ['success' => false, 'error' => 'Reply not found or access denied.'];
+    }
+
+    return ['success' => true];
 }
 
 /**
