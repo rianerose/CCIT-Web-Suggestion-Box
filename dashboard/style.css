@@ -171,6 +171,13 @@
   gap: 0.4rem;
 }
 
+.suggestion-card__title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
 .suggestion-card__title {
   font-size: 1.25rem;
   font-weight: 600;
@@ -194,6 +201,21 @@
 .suggestion-card__status {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
+}
+
+.suggestion-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.suggestion-card__actions--student {
+  justify-content: flex-start;
+}
+
+.inline-form {
+  display: inline;
 }
 
 .reply-thread {
@@ -286,9 +308,25 @@
   cursor: pointer;
 }
 
+.button--sm {
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+}
+
 .button--primary {
   background: var(--color-text-primary);
   color: var(--color-text-inverse);
+}
+
+.button--ghost {
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+.button--danger {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+  border-color: var(--color-error-bg);
 }
 
 .button--primary:hover,
@@ -297,6 +335,16 @@
 .button:focus-visible {
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
+}
+
+.button--danger:hover,
+.button--danger:focus-visible {
+  filter: brightness(1.1);
+}
+
+.button--ghost:hover,
+.button--ghost:focus-visible {
+  background: var(--color-surface-muted);
 }
 
 .checkbox {
@@ -336,6 +384,19 @@
 .checkbox__label {
   cursor: pointer;
   color: var(--color-text-primary);
+}
+
+.reply__delete {
+  margin-left: auto;
+}
+
+.suggestion-form--inline {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  gap: 1rem;
 }
 
 @media (max-width: 960px) {
