@@ -3,6 +3,42 @@ require_once __DIR__ . '/../config.php';
 
 ensure_logged_in();
 
+if (!function_exists('format_suggestion_preview')) {
+    /**
+     * @param string $content
+     */
+    function format_suggestion_preview(string $content): string
+    {
+        $normalized = preg_replace('/\s+/', ' ', $content);
+
+        if ($normalized === null) {
+            $normalized = $content;
+        }
+
+        $singleLine = trim($normalized);
+
+        if ($singleLine === '') {
+            return 'Suggestion';
+        }
+
+        $limit = 80;
+
+        if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+            if (mb_strlen($singleLine) <= $limit) {
+                return $singleLine;
+            }
+
+            return rtrim(mb_substr($singleLine, 0, $limit - 3)) . '...';
+        }
+
+        if (strlen($singleLine) <= $limit) {
+            return $singleLine;
+        }
+
+        return rtrim(substr($singleLine, 0, $limit - 3)) . '...';
+    }
+}
+
 /** @var array{id: int, username: string, full_name: string, role: string} $currentUser */
 $currentUser = $_SESSION['user'];
 $isAdmin = $currentUser['role'] === 'admin';
@@ -21,7 +57,6 @@ if (!empty($_SESSION['flash_error'])) {
 }
 
 $suggestionFormErrors = [];
-$suggestionTitle = '';
 $suggestionContent = '';
 $suggestionRevealIdentity = true;
 
@@ -129,7 +164,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $suggestionTitle = trim((string) ($_POST['title'] ?? ''));
         $suggestionContent = trim((string) ($_POST['content'] ?? ''));
         $suggestionRevealIdentity = isset($_POST['display_identity']);
 
@@ -143,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
 
-            $result = update_suggestion($suggestionId, $currentUser['id'], $suggestionTitle, $suggestionContent, $suggestionRevealIdentity);
+            $result = update_suggestion($suggestionId, $currentUser['id'], $suggestionContent, $suggestionRevealIdentity);
 
             if ($result['success']) {
                 $_SESSION['flash_success'] = 'Suggestion updated successfully.';
@@ -157,13 +191,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($suggestionId > 0) {
                 $editSuggestionDrafts[$suggestionId] = [
-                    'title' => $suggestionTitle,
                     'content' => $suggestionContent,
                     'display_identity' => $suggestionRevealIdentity,
                 ];
             }
         } else {
-            $result = create_suggestion($currentUser['id'], $suggestionTitle, $suggestionContent, $suggestionRevealIdentity);
+            $result = create_suggestion($currentUser['id'], $suggestionContent, $suggestionRevealIdentity);
 
             if ($result['success']) {
                 $_SESSION['flash_success'] = 'Suggestion submitted. Thank you for sharing your ideas!';
@@ -204,7 +237,6 @@ if (!$isAdmin && $editingSuggestionId !== null) {
 
     if (!isset($editSuggestionDrafts[$editingSuggestionId])) {
         $editSuggestionDrafts[$editingSuggestionId] = [
-            'title' => $matchedSuggestion['title'],
             'content' => $matchedSuggestion['content'],
             'display_identity' => !$matchedSuggestion['is_anonymous'],
         ];
@@ -301,12 +333,15 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
             <p class="panel__empty">No suggestions yet. Check back soon.</p>
           <?php else: ?>
             <div class="suggestion-grid">
-              <?php foreach ($suggestions as $suggestion): ?>
-                  <?php $suggestionId = (int) $suggestion['id']; ?>
+                <?php foreach ($suggestions as $suggestion): ?>
+                    <?php
+                        $suggestionId = (int) $suggestion['id'];
+                        $suggestionPreview = format_suggestion_preview($suggestion['content']);
+                    ?>
                 <article class="suggestion-card">
                   <header class="suggestion-card__header">
                       <div class="suggestion-card__title-row">
-                        <h2 class="suggestion-card__title"><?= htmlspecialchars($suggestion['title'], ENT_QUOTES) ?></h2>
+                          <h2 class="suggestion-card__title"><?= htmlspecialchars($suggestionPreview, ENT_QUOTES) ?></h2>
                         <form class="inline-form" method="post" onsubmit="return confirm('Delete this suggestion and all associated replies?');">
                           <input type="hidden" name="action" value="delete_suggestion">
                           <input type="hidden" name="suggestion_id" value="<?= $suggestionId ?>">
@@ -382,18 +417,6 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
             <form class="suggestion-form" method="post" novalidate>
                 <input type="hidden" name="action" value="create_suggestion">
               <label class="form-field">
-                <span class="form-field__label">Title</span>
-                <input
-                  class="form-field__input"
-                  type="text"
-                  name="title"
-                  value="<?= htmlspecialchars($suggestionTitle, ENT_QUOTES) ?>"
-                  maxlength="190"
-                  required
-                >
-              </label>
-
-              <label class="form-field">
                 <span class="form-field__label">Suggestion details</span>
                 <textarea
                   class="form-field__input form-field__input--textarea"
@@ -426,23 +449,23 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
               <p class="panel__empty">You have not shared any suggestions yet.</p>
             <?php else: ?>
               <div class="suggestion-list">
-                <?php foreach ($suggestions as $suggestion): ?>
-                    <?php
-                      $studentSuggestionId = (int) $suggestion['id'];
-                      $isEditing = $editingSuggestionId === $studentSuggestionId;
-                      $editDraft = $editSuggestionDrafts[$studentSuggestionId] ?? null;
-                      if ($isEditing && $editDraft === null) {
-                          $editDraft = [
-                              'title' => $suggestion['title'],
-                              'content' => $suggestion['content'],
-                              'display_identity' => !$suggestion['is_anonymous'],
-                          ];
-                      }
-                      $editErrors = $editSuggestionErrors[$studentSuggestionId] ?? [];
-                    ?>
+                  <?php foreach ($suggestions as $suggestion): ?>
+                      <?php
+                        $studentSuggestionId = (int) $suggestion['id'];
+                        $isEditing = $editingSuggestionId === $studentSuggestionId;
+                        $editDraft = $editSuggestionDrafts[$studentSuggestionId] ?? null;
+                        if ($isEditing && $editDraft === null) {
+                            $editDraft = [
+                                'content' => $suggestion['content'],
+                                'display_identity' => !$suggestion['is_anonymous'],
+                            ];
+                        }
+                        $editErrors = $editSuggestionErrors[$studentSuggestionId] ?? [];
+                        $suggestionPreview = format_suggestion_preview($suggestion['content']);
+                      ?>
                   <article class="suggestion-card">
                     <header class="suggestion-card__header">
-                      <h3 class="suggestion-card__title"><?= htmlspecialchars($suggestion['title'], ENT_QUOTES) ?></h3>
+                        <h3 class="suggestion-card__title"><?= htmlspecialchars($suggestionPreview, ENT_QUOTES) ?></h3>
                       <span class="suggestion-card__meta">
                         <?= $suggestion['is_anonymous'] ? 'Sent anonymously' : 'Name shared with admins' ?>
                         &nbsp;&middot;&nbsp;<?= htmlspecialchars(date('M j, Y g:i A', strtotime($suggestion['created_at'])), ENT_QUOTES) ?>
@@ -469,18 +492,6 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                         <form class="suggestion-form suggestion-form--inline" method="post" novalidate>
                           <input type="hidden" name="action" value="update_suggestion">
                           <input type="hidden" name="suggestion_id" value="<?= $studentSuggestionId ?>">
-                          <label class="form-field">
-                            <span class="form-field__label">Title</span>
-                            <input
-                              class="form-field__input"
-                              type="text"
-                              name="title"
-                              value="<?= htmlspecialchars($editDraft['title'] ?? $suggestion['title'], ENT_QUOTES) ?>"
-                              maxlength="190"
-                              required
-                            >
-                          </label>
-
                           <label class="form-field">
                             <span class="form-field__label">Suggestion details</span>
                             <textarea

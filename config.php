@@ -188,7 +188,7 @@ function ensure_users_table_exists(\PDO $pdo): void
 function ensure_suggestions_table_exists(\PDO $pdo): void
 {
     $pdo->exec(
-        "CREATE TABLE IF NOT EXISTS suggestions (\n            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,\n            student_id INT UNSIGNED NOT NULL,\n            title VARCHAR(190) NOT NULL,\n            content TEXT NOT NULL,\n            is_anonymous TINYINT(1) NOT NULL DEFAULT 0,\n            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n            CONSTRAINT fk_suggestions_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE\n        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        "CREATE TABLE IF NOT EXISTS suggestions (\n            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,\n            student_id INT UNSIGNED NOT NULL,\n            content TEXT NOT NULL,\n            is_anonymous TINYINT(1) NOT NULL DEFAULT 0,\n            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n            CONSTRAINT fk_suggestions_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE\n        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 }
 
@@ -356,14 +356,9 @@ function ensure_admin(): void
 /**
  * @return array{success: bool, error?: string, suggestion_id?: int}
  */
-function create_suggestion(int $studentId, string $title, string $content, bool $displayIdentity): array
+function create_suggestion(int $studentId, string $content, bool $displayIdentity): array
 {
-    $title = trim($title);
     $content = trim($content);
-
-    if ($title === '') {
-        return ['success' => false, 'error' => 'Title is required.'];
-    }
 
     if ($content === '') {
         return ['success' => false, 'error' => 'Suggestion details are required.'];
@@ -371,10 +366,9 @@ function create_suggestion(int $studentId, string $title, string $content, bool 
 
     $pdo = get_db_connection();
 
-    $statement = $pdo->prepare('INSERT INTO suggestions (student_id, title, content, is_anonymous) VALUES (:student_id, :title, :content, :is_anonymous)');
+    $statement = $pdo->prepare('INSERT INTO suggestions (student_id, content, is_anonymous) VALUES (:student_id, :content, :is_anonymous)');
     $statement->execute([
         'student_id' => $studentId,
-        'title' => $title,
         'content' => $content,
         'is_anonymous' => $displayIdentity ? 0 : 1,
     ]);
@@ -385,14 +379,9 @@ function create_suggestion(int $studentId, string $title, string $content, bool 
 /**
  * @return array{success: bool, error?: string}
  */
-function update_suggestion(int $suggestionId, int $studentId, string $title, string $content, bool $displayIdentity): array
+function update_suggestion(int $suggestionId, int $studentId, string $content, bool $displayIdentity): array
 {
-    $title = trim($title);
     $content = trim($content);
-
-    if ($title === '') {
-        return ['success' => false, 'error' => 'Title is required.'];
-    }
 
     if ($content === '') {
         return ['success' => false, 'error' => 'Suggestion details are required.'];
@@ -409,10 +398,9 @@ function update_suggestion(int $suggestionId, int $studentId, string $title, str
         return ['success' => false, 'error' => 'Suggestion not found or access denied.'];
     }
 
-    $update = $pdo->prepare('UPDATE suggestions SET title = :title, content = :content, is_anonymous = :is_anonymous WHERE id = :id');
+    $update = $pdo->prepare('UPDATE suggestions SET content = :content, is_anonymous = :is_anonymous WHERE id = :id');
     $update->execute([
         'id' => $suggestionId,
-        'title' => $title,
         'content' => $content,
         'is_anonymous' => $displayIdentity ? 0 : 1,
     ]);
@@ -513,7 +501,7 @@ function add_suggestion_reply(int $suggestionId, int $adminId, string $message):
 }
 
 /**
- * @return array<int, array{id: int, title: string, content: string, is_anonymous: bool, created_at: string, replies: array<int, array{id: int, message: string, created_at: string, admin_name: string}>>>
+ * @return array<int, array{id: int, content: string, is_anonymous: bool, created_at: string, replies: array<int, array{id: int, message: string, created_at: string, admin_name: string}>>>
  */
 function get_student_suggestions(int $studentId): array
 {
@@ -521,7 +509,6 @@ function get_student_suggestions(int $studentId): array
 
     $sql = 'SELECT 
                 s.id AS suggestion_id,
-                s.title,
                 s.content,
                 s.is_anonymous,
                 s.created_at AS suggestion_created_at,
@@ -544,7 +531,7 @@ function get_student_suggestions(int $studentId): array
 }
 
 /**
- * @return array<int, array{id: int, title: string, content: string, is_anonymous: bool, created_at: string, student_name: string, student_username: string, replies: array<int, array{id: int, message: string, created_at: string, admin_name: string}>>>
+ * @return array<int, array{id: int, content: string, is_anonymous: bool, created_at: string, student_name: string, student_username: string, replies: array<int, array{id: int, message: string, created_at: string, admin_name: string}>>>
  */
 function get_all_suggestions_for_admin(): array
 {
@@ -552,7 +539,6 @@ function get_all_suggestions_for_admin(): array
 
     $sql = 'SELECT 
                 s.id AS suggestion_id,
-                s.title,
                 s.content,
                 s.is_anonymous,
                 s.created_at AS suggestion_created_at,
@@ -587,7 +573,6 @@ function format_suggestions_with_replies(array $rows, bool $includeStudent): arr
         if (!isset($suggestions[$suggestionId])) {
             $suggestions[$suggestionId] = [
                 'id' => $suggestionId,
-                'title' => (string) $row['title'],
                 'content' => (string) $row['content'],
                 'is_anonymous' => (bool) $row['is_anonymous'],
                 'created_at' => (string) $row['suggestion_created_at'],
