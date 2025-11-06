@@ -5,6 +5,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+date_default_timezone_set('Asia/Manila');
+
 if (!defined('DEFAULT_ADMIN_USERNAME')) {
     define('DEFAULT_ADMIN_USERNAME', 'admin');
 }

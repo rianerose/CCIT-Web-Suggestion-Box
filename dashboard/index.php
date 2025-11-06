@@ -28,6 +28,7 @@ if (!function_exists('render_collapsible_suggestion_body')) {
             class="suggestion-card__body-content"
             id="<?= $safeContentId ?>"
             data-collapsible-content
+            data-suggestion-content
           ><?= $contentMarkup ?></div>
           <button
             class="suggestion-card__toggle"
@@ -364,24 +365,26 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
             </div>
           <?php endif; ?>
 
-          <?php if (empty($suggestions)): ?>
-            <p class="panel__empty">No suggestions yet. Check back soon.</p>
-          <?php else: ?>
-              <div class="suggestion-grid">
-                  <?php foreach ($suggestions as $suggestion): ?>
-                      <?php $suggestionId = (int) $suggestion['id']; ?>
+            <p class="panel__empty" data-suggestions-empty="admin"<?= empty($suggestions) ? '' : ' hidden' ?>>No suggestions yet. Check back soon.</p>
+
+            <div class="suggestion-grid" data-suggestions-container="admin"<?= empty($suggestions) ? ' hidden' : '' ?>>
+              <?php foreach ($suggestions as $suggestion): ?>
+                <?php $suggestionId = (int) $suggestion['id']; ?>
                 <article class="suggestion-card" data-suggestion-id="<?= $suggestionId ?>">
                   <header class="suggestion-card__header">
                     <div class="suggestion-card__meta-row">
                       <span class="suggestion-card__meta">
-                      <?php if ($suggestion['is_anonymous']): ?>
-                        Submitted anonymously
-                      <?php else: ?>
-                        <?= htmlspecialchars($suggestion['student_name'], ENT_QUOTES) ?>
-                        <span class="suggestion-card__username">(@<?= htmlspecialchars($suggestion['student_username'], ENT_QUOTES) ?>)</span>
-                      <?php endif; ?>
-                      &nbsp;&middot;&nbsp;<?= htmlspecialchars(date('M j, Y g:i A', strtotime($suggestion['created_at'])), ENT_QUOTES) ?>
-                    </span>
+                        <span data-suggestion-identity>
+                          <?php if ($suggestion['is_anonymous']): ?>
+                            Submitted anonymously
+                          <?php else: ?>
+                            <?= htmlspecialchars($suggestion['student_name'], ENT_QUOTES) ?>
+                            <span class="suggestion-card__username">(@<?= htmlspecialchars($suggestion['student_username'], ENT_QUOTES) ?>)</span>
+                          <?php endif; ?>
+                        </span>
+                        &nbsp;&middot;&nbsp;
+                        <span data-suggestion-created><?= htmlspecialchars(date('M j, Y g:i A', strtotime($suggestion['created_at'])), ENT_QUOTES) ?></span>
+                      </span>
                       <form class="inline-form" method="post" onsubmit="return confirm('Delete this suggestion and all associated replies?');">
                         <input type="hidden" name="action" value="delete_suggestion">
                         <input type="hidden" name="suggestion_id" value="<?= $suggestionId ?>">
@@ -390,12 +393,12 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                       </form>
                     </div>
                   </header>
-                    <?php render_collapsible_suggestion_body($suggestionId, (string) $suggestion['content']); ?>
+                  <?php render_collapsible_suggestion_body($suggestionId, (string) $suggestion['content']); ?>
 
                   <div class="reply-thread" data-replies-for="<?= $suggestionId ?>">
                     <?php foreach ($suggestion['replies'] as $reply): ?>
-                        <?php $replyId = (int) $reply['id']; ?>
-                      <div class="reply">
+                      <?php $replyId = (int) $reply['id']; ?>
+                      <div class="reply" data-reply-id="<?= $replyId ?>">
                         <div class="reply__meta">
                           <span class="reply__author">Reply from <?= htmlspecialchars($reply['admin_name'], ENT_QUOTES) ?></span>
                           <span class="reply__date"><?= htmlspecialchars(date('M j, Y g:i A', strtotime($reply['created_at'])), ENT_QUOTES) ?></span>
@@ -427,8 +430,7 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                   </form>
                 </article>
               <?php endforeach; ?>
-              </div>
-          <?php endif; ?>
+            </div>
         </section>
       <?php else: ?>
         <section class="panel panel--student">
@@ -477,29 +479,28 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
               <p class="panel__subtitle">Track responses from administrators in real time.</p>
             </header>
 
-            <?php if (empty($suggestions)): ?>
-              <p class="panel__empty">You have not shared any suggestions yet.</p>
-            <?php else: ?>
-                <div class="suggestion-list">
-                    <?php foreach ($suggestions as $suggestion): ?>
-                        <?php
-                          $studentSuggestionId = (int) $suggestion['id'];
-                          $isEditing = $editingSuggestionId === $studentSuggestionId;
-                          $editDraft = $editSuggestionDrafts[$studentSuggestionId] ?? null;
-                          if ($isEditing && $editDraft === null) {
-                              $editDraft = [
-                                  'content' => $suggestion['content'],
-                                  'display_identity' => !$suggestion['is_anonymous'],
-                              ];
-                          }
-                          $editErrors = $editSuggestionErrors[$studentSuggestionId] ?? [];
-                        ?>
+              <p class="panel__empty" data-suggestions-empty="student"<?= empty($suggestions) ? '' : ' hidden' ?>>You have not shared any suggestions yet.</p>
+              <div class="suggestion-list" data-suggestions-container="student"<?= empty($suggestions) ? ' hidden' : '' ?>>
+                <?php foreach ($suggestions as $suggestion): ?>
+                  <?php
+                    $studentSuggestionId = (int) $suggestion['id'];
+                    $isEditing = $editingSuggestionId === $studentSuggestionId;
+                    $editDraft = $editSuggestionDrafts[$studentSuggestionId] ?? null;
+                    if ($isEditing && $editDraft === null) {
+                        $editDraft = [
+                            'content' => $suggestion['content'],
+                            'display_identity' => !$suggestion['is_anonymous'],
+                        ];
+                    }
+                    $editErrors = $editSuggestionErrors[$studentSuggestionId] ?? [];
+                  ?>
                   <article class="suggestion-card" data-suggestion-id="<?= $studentSuggestionId ?>">
                     <header class="suggestion-card__header">
                       <div class="suggestion-card__meta-row">
                         <span class="suggestion-card__meta">
-                          <?= $suggestion['is_anonymous'] ? 'Sent anonymously' : 'Name shared with admins' ?>
-                          &nbsp;&middot;&nbsp;<?= htmlspecialchars(date('M j, Y g:i A', strtotime($suggestion['created_at'])), ENT_QUOTES) ?>
+                          <span data-suggestion-identity><?= $suggestion['is_anonymous'] ? 'Sent anonymously' : 'Name shared with admins' ?></span>
+                          &nbsp;&middot;&nbsp;
+                          <span data-suggestion-created><?= htmlspecialchars(date('M j, Y g:i A', strtotime($suggestion['created_at'])), ENT_QUOTES) ?></span>
                         </span>
                         <div class="suggestion-card__actions suggestion-card__actions--student">
                           <a class="button button--ghost button--sm" href="<?= htmlspecialchars($isEditing ? 'index.php' : 'index.php?edit=' . $studentSuggestionId, ENT_QUOTES) ?>">
@@ -513,44 +514,44 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                         </div>
                       </div>
                     </header>
-                      <?php if ($isEditing): ?>
-                        <?php if (!empty($editErrors)): ?>
-                          <div class="alert alert--error">
-                            <?php foreach ($editErrors as $error): ?>
-                              <p><?= htmlspecialchars($error) ?></p>
-                            <?php endforeach; ?>
-                          </div>
-                        <?php endif; ?>
-                        <form class="suggestion-form suggestion-form--inline" method="post" novalidate>
-                          <input type="hidden" name="action" value="update_suggestion">
-                          <input type="hidden" name="suggestion_id" value="<?= $studentSuggestionId ?>">
-                          <label class="form-field">
-                            <span class="form-field__label">Suggestion details</span>
-                            <textarea
-                              class="form-field__input form-field__input--textarea"
-                              name="content"
-                              rows="6"
-                              required><?= htmlspecialchars($editDraft['content'] ?? $suggestion['content'], ENT_QUOTES) ?></textarea>
-                          </label>
-
-                          <label class="checkbox">
-                            <input
-                              class="checkbox__input"
-                              type="checkbox"
-                              name="display_identity"
-                              <?= !empty($editDraft['display_identity']) ? 'checked' : '' ?>
-                            >
-                            <span class="checkbox__label">Display my name to administrators</span>
-                          </label>
-
-                          <button class="button button--primary" type="submit">Update suggestion</button>
-                        </form>
+                    <?php if ($isEditing): ?>
+                      <?php if (!empty($editErrors)): ?>
+                        <div class="alert alert--error">
+                          <?php foreach ($editErrors as $error): ?>
+                            <p><?= htmlspecialchars($error) ?></p>
+                          <?php endforeach; ?>
+                        </div>
                       <?php endif; ?>
-                      <?php render_collapsible_suggestion_body($studentSuggestionId, (string) $suggestion['content']); ?>
+                      <form class="suggestion-form suggestion-form--inline" method="post" novalidate>
+                        <input type="hidden" name="action" value="update_suggestion">
+                        <input type="hidden" name="suggestion_id" value="<?= $studentSuggestionId ?>">
+                        <label class="form-field">
+                          <span class="form-field__label">Suggestion details</span>
+                          <textarea
+                            class="form-field__input form-field__input--textarea"
+                            name="content"
+                            rows="6"
+                            required><?= htmlspecialchars($editDraft['content'] ?? $suggestion['content'], ENT_QUOTES) ?></textarea>
+                        </label>
+
+                        <label class="checkbox">
+                          <input
+                            class="checkbox__input"
+                            type="checkbox"
+                            name="display_identity"
+                            <?= !empty($editDraft['display_identity']) ? 'checked' : '' ?>
+                          >
+                          <span class="checkbox__label">Display my name to administrators</span>
+                        </label>
+
+                        <button class="button button--primary" type="submit">Update suggestion</button>
+                      </form>
+                    <?php endif; ?>
+                    <?php render_collapsible_suggestion_body($studentSuggestionId, (string) $suggestion['content']); ?>
 
                     <div class="reply-thread" data-replies-for="<?= $studentSuggestionId ?>">
                       <?php foreach ($suggestion['replies'] as $reply): ?>
-                        <div class="reply reply--student">
+                        <div class="reply reply--student" data-reply-id="<?= (int) $reply['id']; ?>">
                           <div class="reply__meta">
                             <span class="reply__author">Response from <?= htmlspecialchars($reply['admin_name'], ENT_QUOTES) ?></span>
                             <span class="reply__date"><?= htmlspecialchars(date('M j, Y g:i A', strtotime($reply['created_at'])), ENT_QUOTES) ?></span>
@@ -562,24 +563,25 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                     <p class="suggestion-card__status" data-empty-state-for="<?= $studentSuggestionId ?>"<?= !empty($suggestion['replies']) ? ' hidden' : '' ?>>Awaiting administrator reply.</p>
                   </article>
                 <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
+              </div>
           </div>
         </section>
         <?php endif; ?>
       </main>
-      <script>
-        (function () {
-          var dashboard = document.querySelector('.dashboard');
-          if (!dashboard) {
-            return;
-          }
-          var DEFAULT_COLLAPSED_HEIGHT = 240;
-          var collapsibleItems = initCollapsibleCards(dashboard);
-          var resizeTimerId = null;
+        <script>
+          (function () {
+            var dashboard = document.querySelector('.dashboard');
+            if (!dashboard) {
+              return;
+            }
 
-          if (collapsibleItems.length) {
-            scheduleCollapsibleEvaluation(collapsibleItems);
+            var DEFAULT_COLLAPSED_HEIGHT = 240;
+            var collapsibleItems = initCollapsibleCards(dashboard);
+            var resizeTimerId = null;
+
+            if (collapsibleItems.length) {
+              scheduleCollapsibleEvaluation(collapsibleItems);
+            }
 
             window.addEventListener('resize', function () {
               if (resizeTimerId !== null) {
@@ -591,199 +593,479 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                 resizeTimerId = null;
               }, 150);
             });
-          }
 
-          var role = dashboard.getAttribute('data-role') || 'student';
-          var filter = dashboard.getAttribute('data-filter') || 'all';
+            var role = dashboard.getAttribute('data-role') || 'student';
+            var filter = dashboard.getAttribute('data-filter') || 'all';
 
-          var cards = dashboard.querySelectorAll('[data-suggestion-id]');
-          if (!cards.length) {
-            return;
-          }
+            var suggestionContainer = dashboard.querySelector('[data-suggestions-container="' + role + '"]');
+            var suggestionsEmptyState = dashboard.querySelector('[data-suggestions-empty="' + role + '"]');
 
-          var suggestionMap = {};
-          for (var i = 0; i < cards.length; i += 1) {
-            var card = cards[i];
-            var suggestionId = card.getAttribute('data-suggestion-id');
+            var suggestionMap = {};
+            registerExistingCards();
+            toggleEmptyState(Object.keys(suggestionMap).length > 0);
 
-            if (!suggestionId) {
-              continue;
+            var isFetching = false;
+            var pollDelay = 5000;
+            var pollTimerId = null;
+
+            scheduleNextPoll(3000);
+
+            function registerExistingCards() {
+              var cards = dashboard.querySelectorAll('[data-suggestion-id]');
+
+              for (var i = 0; i < cards.length; i += 1) {
+                var card = cards[i];
+                var suggestionId = card.getAttribute('data-suggestion-id');
+
+                if (!suggestionId) {
+                  continue;
+                }
+
+                suggestionMap[suggestionId] = buildEntry(card);
+              }
             }
 
-            suggestionMap[suggestionId] = {
-              card: card,
-              replies: card.querySelector('[data-replies-for]'),
-              emptyState: card.querySelector('[data-empty-state-for]')
-            };
-          }
+            function buildEntry(card) {
+              return {
+                card: card,
+                identity: card.querySelector('[data-suggestion-identity]'),
+                created: card.querySelector('[data-suggestion-created]'),
+                content: card.querySelector('[data-suggestion-content]'),
+                replies: card.querySelector('[data-replies-for]'),
+                emptyState: card.querySelector('[data-empty-state-for]')
+              };
+            }
 
-          var mapKeys = Object.keys(suggestionMap);
-          if (!mapKeys.length) {
-            return;
-          }
+            function ensureSuggestionContainer() {
+              if (suggestionContainer) {
+                return suggestionContainer;
+              }
 
-          function escapeHtml(value) {
-            return String(value)
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#039;');
-          }
+              suggestionContainer = dashboard.querySelector('[data-suggestions-container="' + role + '"]');
+              return suggestionContainer;
+            }
 
-          function formatMessage(message) {
-            return escapeHtml(message).replace(/\r?\n/g, '<br>');
-          }
+            function toggleEmptyState(hasSuggestions) {
+              if (suggestionsEmptyState) {
+                if (hasSuggestions) {
+                  suggestionsEmptyState.setAttribute('hidden', 'hidden');
+                } else {
+                  suggestionsEmptyState.removeAttribute('hidden');
+                }
+              }
 
-          function renderAdminReply(reply) {
-            var currentFilter = filter || 'all';
+              var container = ensureSuggestionContainer();
+              if (!container) {
+                return;
+              }
 
-            return '' +
-              '<div class="reply" data-reply-id="' + reply.id + '">' +
-                '<div class="reply__meta">' +
-                  '<span class="reply__author">Reply from ' + escapeHtml(reply.admin_name) + '</span>' +
-                  '<span class="reply__date">' + escapeHtml(reply.created_at_human) + '</span>' +
-                  '<form class="inline-form reply__delete" method="post" onsubmit="return confirm(\'Delete this reply?\');">' +
-                    '<input type="hidden" name="action" value="delete_reply">' +
-                    '<input type="hidden" name="reply_id" value="' + reply.id + '">' +
-                    '<input type="hidden" name="current_filter" value="' + escapeHtml(currentFilter) + '">' +
-                    '<button class="button button--danger button--sm" type="submit">Delete reply</button>' +
+              if (hasSuggestions) {
+                container.removeAttribute('hidden');
+              } else {
+                container.setAttribute('hidden', 'hidden');
+              }
+            }
+
+            function createElementFromHTML(html) {
+              var wrapper = document.createElement('div');
+              wrapper.innerHTML = html.trim();
+              return wrapper.firstElementChild || null;
+            }
+
+            function escapeHtml(value) {
+              return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+            }
+
+            function formatMessage(message) {
+              return escapeHtml(message || '').replace(/\r?\n/g, '<br>');
+            }
+
+            function renderAdminIdentity(suggestion) {
+              if (suggestion.is_anonymous) {
+                return 'Submitted anonymously';
+              }
+
+              var name = escapeHtml(suggestion.student_name || 'Unknown');
+              var username = escapeHtml(suggestion.student_username || '');
+              return name + '<span class="suggestion-card__username">(@' + username + ')</span>';
+            }
+
+            function renderStudentIdentity(suggestion) {
+              return suggestion.is_anonymous ? 'Sent anonymously' : 'Name shared with admins';
+            }
+
+            function renderSuggestionBodyHtml(suggestion) {
+              var contentId = 'suggestion-content-' + suggestion.id;
+              var safeContentId = escapeHtml(contentId);
+              var collapsedHeight = DEFAULT_COLLAPSED_HEIGHT;
+
+              return (
+                '<div class="suggestion-card__body" data-collapsible data-collapsible-height="' + collapsedHeight + '">' +
+                  '<div class="suggestion-card__body-content" id="' + safeContentId + '" data-collapsible-content data-suggestion-content>' +
+                    formatMessage(suggestion.content || '') +
+                  '</div>' +
+                  '<button class="suggestion-card__toggle" type="button" data-collapsible-toggle aria-expanded="false" aria-controls="' + safeContentId + '" hidden>' +
+                    '<span class="suggestion-card__toggle-text suggestion-card__toggle-text--more">Show more</span>' +
+                    '<span class="suggestion-card__toggle-text suggestion-card__toggle-text--less">Show less</span>' +
+                  '</button>' +
+                '</div>'
+              );
+            }
+
+            function renderRepliesHtml(replies, isAdminView) {
+              if (!Array.isArray(replies) || !replies.length) {
+                return '';
+              }
+
+              var rendered = [];
+              for (var i = 0; i < replies.length; i += 1) {
+                var reply = replies[i];
+                rendered.push(isAdminView ? renderAdminReply(reply) : renderStudentReply(reply));
+              }
+
+              return rendered.join('');
+            }
+
+            function renderAdminSuggestionCardHtml(suggestion) {
+              var identityHtml = renderAdminIdentity(suggestion);
+              var createdAt = escapeHtml(suggestion.created_at_human || '');
+              var repliesHtml = renderRepliesHtml(suggestion.replies, true);
+              var suggestionId = escapeHtml(String(suggestion.id));
+              var currentFilter = escapeHtml(filter || 'all');
+
+              return (
+                '<article class="suggestion-card" data-suggestion-id="' + suggestionId + '">' +
+                  '<header class="suggestion-card__header">' +
+                    '<div class="suggestion-card__meta-row">' +
+                      '<span class="suggestion-card__meta">' +
+                        '<span data-suggestion-identity>' + identityHtml + '</span>' +
+                        '&nbsp;&middot;&nbsp;' +
+                        '<span data-suggestion-created>' + createdAt + '</span>' +
+                      '</span>' +
+                      '<form class="inline-form" method="post" onsubmit="return confirm(\'Delete this suggestion and all associated replies?\');">' +
+                        '<input type="hidden" name="action" value="delete_suggestion">' +
+                        '<input type="hidden" name="suggestion_id" value="' + suggestionId + '">' +
+                        '<input type="hidden" name="current_filter" value="' + currentFilter + '">' +
+                        '<button class="button button--danger button--sm" type="submit">Delete suggestion</button>' +
+                      '</form>' +
+                    '</div>' +
+                  '</header>' +
+                  renderSuggestionBodyHtml(suggestion) +
+                  '<div class="reply-thread" data-replies-for="' + suggestionId + '">' + repliesHtml + '</div>' +
+                  '<form class="reply-form" method="post" novalidate>' +
+                    '<input type="hidden" name="action" value="add_reply">' +
+                    '<input type="hidden" name="suggestion_id" value="' + suggestionId + '">' +
+                    '<input type="hidden" name="current_filter" value="' + currentFilter + '">' +
+                    '<label class="form-field">' +
+                      '<span class="form-field__label">Add a reply</span>' +
+                      '<textarea class="form-field__input form-field__input--textarea" name="reply_message" rows="3" required></textarea>' +
+                    '</label>' +
+                    '<button class="button button--primary" type="submit">Send reply</button>' +
                   '</form>' +
-                '</div>' +
-                '<p class="reply__message">' + formatMessage(reply.message) + '</p>' +
-              '</div>';
-          }
-
-          function renderStudentReply(reply) {
-            return '' +
-              '<div class="reply reply--student">' +
-                '<div class="reply__meta">' +
-                  '<span class="reply__author">Response from ' + escapeHtml(reply.admin_name) + '</span>' +
-                  '<span class="reply__date">' + escapeHtml(reply.created_at_human) + '</span>' +
-                '</div>' +
-                '<p class="reply__message">' + formatMessage(reply.message) + '</p>' +
-              '</div>';
-          }
-
-          var isFetching = false;
-          var pollDelay = 10000;
-
-            function scheduleNextPoll(delay) {
-              window.setTimeout(poll, delay);
+                '</article>'
+              );
             }
 
-            function updateCard(suggestion) {
-              var key = String(suggestion.id);
-              var entry = suggestionMap[key];
+            function renderStudentSuggestionCardHtml(suggestion) {
+              var identityText = escapeHtml(renderStudentIdentity(suggestion));
+              var createdAt = escapeHtml(suggestion.created_at_human || '');
+              var repliesHtml = renderRepliesHtml(suggestion.replies, false);
+              var suggestionId = escapeHtml(String(suggestion.id));
+              var editUrl = 'index.php?edit=' + encodeURIComponent(String(suggestion.id));
+              var awaitingHidden = hasReplies(suggestion) ? ' hidden' : '';
 
+              return (
+                '<article class="suggestion-card" data-suggestion-id="' + suggestionId + '">' +
+                  '<header class="suggestion-card__header">' +
+                    '<div class="suggestion-card__meta-row">' +
+                      '<span class="suggestion-card__meta">' +
+                        '<span data-suggestion-identity>' + identityText + '</span>' +
+                        '&nbsp;&middot;&nbsp;' +
+                        '<span data-suggestion-created>' + createdAt + '</span>' +
+                      '</span>' +
+                      '<div class="suggestion-card__actions suggestion-card__actions--student">' +
+                        '<a class="button button--ghost button--sm" href="' + escapeHtml(editUrl) + '">Edit</a>' +
+                        '<form class="inline-form" method="post" onsubmit="return confirm(\'Delete this suggestion? This action cannot be undone.\');">' +
+                          '<input type="hidden" name="action" value="delete_suggestion">' +
+                          '<input type="hidden" name="suggestion_id" value="' + suggestionId + '">' +
+                          '<button class="button button--danger button--sm" type="submit">Delete</button>' +
+                        '</form>' +
+                      '</div>' +
+                    '</div>' +
+                  '</header>' +
+                  renderSuggestionBodyHtml(suggestion) +
+                  '<div class="reply-thread" data-replies-for="' + suggestionId + '">' + repliesHtml + '</div>' +
+                  '<p class="suggestion-card__status" data-empty-state-for="' + suggestionId + '"' + awaitingHidden + '>Awaiting administrator reply.</p>' +
+                '</article>'
+              );
+            }
+
+            function ensureSuggestionEntry(suggestion) {
+              var suggestionId = String(suggestion.id);
+              if (!suggestionId || suggestionId === '0') {
+                return null;
+              }
+
+              var entry = suggestionMap[suggestionId];
+
+              if (!entry) {
+                var cardHtml = role === 'admin'
+                  ? renderAdminSuggestionCardHtml(suggestion)
+                  : renderStudentSuggestionCardHtml(suggestion);
+                var card = createElementFromHTML(cardHtml);
+                if (!card) {
+                  return null;
+                }
+
+                entry = buildEntry(card);
+                suggestionMap[suggestionId] = entry;
+
+                var newItems = initCollapsibleCards(card);
+                if (newItems.length) {
+                  collapsibleItems = collapsibleItems.concat(newItems);
+                }
+              }
+
+              updateEntryFields(entry, suggestion);
+              updateReplies(entry, suggestion);
+
+              return entry;
+            }
+
+            function updateEntryFields(entry, suggestion) {
+              if (!entry) {
+                return;
+              }
+
+              if (entry.identity) {
+                if (role === 'admin') {
+                  entry.identity.innerHTML = renderAdminIdentity(suggestion);
+                } else {
+                  entry.identity.textContent = renderStudentIdentity(suggestion);
+                }
+              }
+
+              if (entry.created) {
+                entry.created.textContent = suggestion.created_at_human || '';
+              }
+
+              if (entry.content) {
+                entry.content.innerHTML = formatMessage(suggestion.content || '');
+              }
+            }
+
+            function updateReplies(entry, suggestion) {
               if (!entry || !entry.replies) {
                 return;
               }
 
-              var repliesHtml = '';
-
-              if (Array.isArray(suggestion.replies) && suggestion.replies.length) {
-                var rendered = [];
-                for (var j = 0; j < suggestion.replies.length; j += 1) {
-                  var reply = suggestion.replies[j];
-                  if (role === 'admin') {
-                    rendered.push(renderAdminReply(reply));
-                  } else {
-                    rendered.push(renderStudentReply(reply));
-                  }
-                }
-
-                repliesHtml = rendered.join('');
-              }
-
+              var repliesHtml = renderRepliesHtml(suggestion.replies, role === 'admin');
               entry.replies.innerHTML = repliesHtml;
 
               if (entry.emptyState) {
-                if (Array.isArray(suggestion.replies) && suggestion.replies.length) {
+                if (hasReplies(suggestion)) {
                   entry.emptyState.setAttribute('hidden', 'hidden');
                 } else {
                   entry.emptyState.removeAttribute('hidden');
                 }
               }
+            }
+
+            function hasReplies(suggestion) {
+              return Array.isArray(suggestion.replies) && suggestion.replies.length > 0;
+            }
+
+            function removeMissingSuggestions(seen) {
+              var keys = Object.keys(suggestionMap);
+              for (var i = 0; i < keys.length; i += 1) {
+                var key = keys[i];
+                if (seen[key]) {
+                  continue;
+                }
+
+                var entry = suggestionMap[key];
+                if (entry && entry.card && entry.card.parentNode) {
+                  entry.card.parentNode.removeChild(entry.card);
+                }
+
+                delete suggestionMap[key];
+              }
+            }
+
+            function pruneCollapsibleItems() {
+              if (!collapsibleItems || !collapsibleItems.length) {
+                return;
+              }
+
+              var active = [];
+              for (var i = 0; i < collapsibleItems.length; i += 1) {
+                var item = collapsibleItems[i];
+                if (!item || !item.container) {
+                  continue;
+                }
+
+                if (document.body && document.body.contains(item.container)) {
+                  active.push(item);
+                }
+              }
+
+              collapsibleItems = active;
+            }
+
+            function syncSuggestions(suggestions) {
+              if (!Array.isArray(suggestions) || !suggestions.length) {
+                toggleEmptyState(false);
+                removeMissingSuggestions({});
+                pruneCollapsibleItems();
+                return;
+              }
+
+              toggleEmptyState(true);
+
+              var container = ensureSuggestionContainer();
+              if (!container) {
+                return;
+              }
+
+              var seen = {};
+              for (var i = 0; i < suggestions.length; i += 1) {
+                var suggestion = suggestions[i];
+                var entry = ensureSuggestionEntry(suggestion);
+                if (!entry || !entry.card) {
+                  continue;
+                }
+
+                container.appendChild(entry.card);
+                seen[String(suggestion.id)] = true;
+              }
+
+              removeMissingSuggestions(seen);
+              pruneCollapsibleItems();
 
               if (collapsibleItems.length) {
                 scheduleCollapsibleEvaluation(collapsibleItems);
               }
             }
 
-          function poll() {
-            if (isFetching) {
-              scheduleNextPoll(pollDelay);
-              return;
+            function renderAdminReply(reply) {
+              var currentFilter = escapeHtml(filter || 'all');
+              var replyId = escapeHtml(String(reply.id));
+
+              return [
+                `<div class="reply" data-reply-id="${replyId}">`,
+                `  <div class="reply__meta">`,
+                `    <span class="reply__author">Reply from ${escapeHtml(reply.admin_name || 'Administrator')}</span>`,
+                `    <span class="reply__date">${escapeHtml(reply.created_at_human || '')}</span>`,
+                `    <form class="inline-form reply__delete" method="post" onsubmit="return confirm('Delete this reply?');">`,
+                `      <input type="hidden" name="action" value="delete_reply">`,
+                `      <input type="hidden" name="reply_id" value="${replyId}">`,
+                `      <input type="hidden" name="current_filter" value="${currentFilter}">`,
+                `      <button class="button button--danger button--sm" type="submit">Delete reply</button>`,
+                '    </form>',
+                '  </div>',
+                `  <p class="reply__message">${formatMessage(reply.message || '')}</p>`,
+                '</div>'
+              ].join('');
             }
 
-            isFetching = true;
+            function renderStudentReply(reply) {
+              var replyId = escapeHtml(String(reply.id));
 
-            var params = 't=' + Date.now();
-            if (role === 'admin' && filter) {
-              params += '&filter=' + encodeURIComponent(filter);
+              return [
+                `<div class="reply reply--student" data-reply-id="${replyId}">`,
+                '  <div class="reply__meta">',
+                `    <span class="reply__author">Response from ${escapeHtml(reply.admin_name || 'Administrator')}</span>`,
+                `    <span class="reply__date">${escapeHtml(reply.created_at_human || '')}</span>`,
+                '  </div>',
+                `  <p class="reply__message">${formatMessage(reply.message || '')}</p>`,
+                '</div>'
+              ].join('');
             }
 
-            fetch('fetch_suggestions.php?' + params, {
-              credentials: 'same-origin',
-              headers: {
-                'Accept': 'application/json'
+            function scheduleNextPoll(delay) {
+              if (pollTimerId !== null) {
+                window.clearTimeout(pollTimerId);
               }
-            })
-              .then(function (response) {
-                if (!response.ok) {
-                  throw new Error('Network response was not ok');
-                }
 
-                return response.json();
-              })
-              .then(function (payload) {
-                if (!payload || !payload.success || !Array.isArray(payload.suggestions)) {
-                  return;
-                }
+              pollTimerId = window.setTimeout(poll, delay);
+            }
 
-                for (var k = 0; k < payload.suggestions.length; k += 1) {
-                  updateCard(payload.suggestions[k]);
-                }
-              })
-              .catch(function (error) {
-                console.error('Suggestion polling error:', error);
-              })
-              .then(function () {
-                isFetching = false;
+            function poll() {
+              if (isFetching) {
                 scheduleNextPoll(pollDelay);
-              });
-          }
-
-          function scheduleCollapsibleEvaluation(items) {
-            if (!items || !items.length) {
-              return;
-            }
-
-            var raf = window.requestAnimationFrame;
-
-            if (typeof raf === 'function') {
-              raf(function () {
-                evaluateCollapsibleItems(items);
-              });
-            } else {
-              window.setTimeout(function () {
-                evaluateCollapsibleItems(items);
-              }, 0);
-            }
-          }
-
-          function evaluateCollapsibleItems(items) {
-            for (var i = 0; i < items.length; i += 1) {
-              var item = items[i];
-
-              if (!item || !item.container || !item.content || !item.toggle) {
-                continue;
+                return;
               }
 
-              var collapsedHeight = typeof item.collapsedHeight === 'number' && item.collapsedHeight > 0
-                ? item.collapsedHeight
-                : DEFAULT_COLLAPSED_HEIGHT;
+              isFetching = true;
+
+              var params = 't=' + Date.now();
+              if (role === 'admin' && filter) {
+                params += '&filter=' + encodeURIComponent(filter);
+              }
+
+              fetch('fetch_suggestions.php?' + params, {
+                credentials: 'same-origin',
+                headers: {
+                  'Accept': 'application/json'
+                }
+              })
+                .then(function (response) {
+                  if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                  }
+
+                  return response.json();
+                })
+                .then(function (payload) {
+                  if (!payload || !payload.success || !Array.isArray(payload.suggestions)) {
+                    return;
+                  }
+
+                  syncSuggestions(payload.suggestions);
+                })
+                .catch(function (error) {
+                  console.error('Suggestion polling error:', error);
+                })
+                .then(function () {
+                  isFetching = false;
+                  scheduleNextPoll(pollDelay);
+                });
+            }
+
+            function scheduleCollapsibleEvaluation(items) {
+              if (!items || !items.length) {
+                return;
+              }
+
+              var raf = window.requestAnimationFrame;
+
+              if (typeof raf === 'function') {
+                raf(function () {
+                  evaluateCollapsibleItems(items);
+                });
+              } else {
+                window.setTimeout(function () {
+                  evaluateCollapsibleItems(items);
+                }, 0);
+              }
+            }
+
+            function evaluateCollapsibleItems(items) {
+              for (var i = 0; i < items.length; i += 1) {
+                var item = items[i];
+
+                if (!item || !item.container || !item.content || !item.toggle) {
+                  continue;
+                }
+
+                var collapsedHeight = typeof item.collapsedHeight === 'number' && item.collapsedHeight > 0
+                  ? item.collapsedHeight
+                  : DEFAULT_COLLAPSED_HEIGHT;
 
                 if (item.content.scrollHeight <= collapsedHeight + 4) {
                   if (!item.toggle.hasAttribute('hidden')) {
@@ -800,85 +1082,83 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
 
                 item.toggle.removeAttribute('hidden');
 
-              if (item.state !== 'expanded' && item.state !== 'collapsed') {
-                item.state = 'collapsed';
+                if (item.state !== 'expanded' && item.state !== 'collapsed') {
+                  item.state = 'collapsed';
+                }
+
+                applyCollapsibleState(item);
+              }
+            }
+
+            function applyCollapsibleState(item) {
+              if (!item || !item.container || !item.toggle) {
+                return;
               }
 
-              applyCollapsibleState(item);
-            }
-          }
-
-          function applyCollapsibleState(item) {
-            if (!item || !item.container || !item.toggle) {
-              return;
+              var state = item.state === 'collapsed' ? 'collapsed' : 'expanded';
+              item.container.setAttribute('data-collapsible-state', state);
+              item.toggle.setAttribute('aria-expanded', state === 'expanded' ? 'true' : 'false');
             }
 
-            var state = item.state === 'collapsed' ? 'collapsed' : 'expanded';
-            item.container.setAttribute('data-collapsible-state', state);
-            item.toggle.setAttribute('aria-expanded', state === 'expanded' ? 'true' : 'false');
-          }
+            function initCollapsibleCards(root) {
+              var containers = root.querySelectorAll('[data-collapsible]');
 
-          function initCollapsibleCards(root) {
-            var containers = root.querySelectorAll('[data-collapsible]');
-
-            if (!containers.length) {
-              return [];
-            }
-
-            var items = [];
-
-            for (var i = 0; i < containers.length; i += 1) {
-              var container = containers[i];
-              var content = container.querySelector('[data-collapsible-content]');
-              var toggle = container.querySelector('[data-collapsible-toggle]');
-
-              if (!content || !toggle) {
-                continue;
+              if (!containers.length) {
+                return [];
               }
 
-              var collapsedHeight = parseCollapsedHeight(container.getAttribute('data-collapsible-height'));
-              container.style.setProperty('--collapsible-collapsed-height', collapsedHeight + 'px');
+              var items = [];
 
-              var item = {
-                container: container,
-                content: content,
-                toggle: toggle,
-                collapsedHeight: collapsedHeight,
-                state: null
-              };
+              for (var i = 0; i < containers.length; i += 1) {
+                var container = containers[i];
+                var content = container.querySelector('[data-collapsible-content]');
+                var toggle = container.querySelector('[data-collapsible-toggle]');
 
-              (function (currentItem) {
-                toggle.addEventListener('click', function () {
-                  currentItem.state = currentItem.state === 'collapsed' ? 'expanded' : 'collapsed';
-                  applyCollapsibleState(currentItem);
-                });
-              })(item);
+                if (!content || !toggle) {
+                  continue;
+                }
 
-              items.push(item);
+                var collapsedHeight = parseCollapsedHeight(container.getAttribute('data-collapsible-height'));
+                container.style.setProperty('--collapsible-collapsed-height', collapsedHeight + 'px');
+
+                var item = {
+                  container: container,
+                  content: content,
+                  toggle: toggle,
+                  collapsedHeight: collapsedHeight,
+                  state: null
+                };
+
+                (function (currentItem) {
+                  toggle.addEventListener('click', function () {
+                    currentItem.state = currentItem.state === 'collapsed' ? 'expanded' : 'collapsed';
+                    applyCollapsibleState(currentItem);
+                  });
+                })(item);
+
+                items.push(item);
+              }
+
+              return items;
             }
 
-            return items;
-          }
+            function parseCollapsedHeight(value) {
+              var fallback = DEFAULT_COLLAPSED_HEIGHT;
 
-          function parseCollapsedHeight(value) {
-            var fallback = DEFAULT_COLLAPSED_HEIGHT;
+              if (!value) {
+                return fallback;
+              }
 
-            if (!value) {
-              return fallback;
+              var parsed = parseInt(value, 10);
+
+              if (isNaN(parsed) || parsed <= 0) {
+                return fallback;
+              }
+
+              return parsed;
             }
-
-            var parsed = parseInt(value, 10);
-
-            if (isNaN(parsed) || parsed <= 0) {
-              return fallback;
-            }
-
-            return parsed;
-          }
-
-          scheduleNextPoll(3000);
-        })();
-      </script>
+          })();
+        </script>
     </div>
 </body>
 </html>
