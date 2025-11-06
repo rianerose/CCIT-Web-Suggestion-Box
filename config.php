@@ -141,6 +141,19 @@ function sanitize_full_name(string $fullName): string
     return $normalized === null ? trim($fullName) : $normalized;
 }
 
+function normalize_admin_suggestion_filter(?string $filter): string
+{
+    $allowed = ['all', 'anonymous', 'named'];
+
+    if ($filter === null) {
+        return 'all';
+    }
+
+    $normalized = strtolower(trim($filter));
+
+    return in_array($normalized, $allowed, true) ? $normalized : 'all';
+}
+
 function get_db_connection(): \PDO
 {
     static $pdo = null;
@@ -533,9 +546,11 @@ function get_student_suggestions(int $studentId): array
 /**
  * @return array<int, array{id: int, content: string, is_anonymous: bool, created_at: string, student_name: string, student_username: string, replies: array<int, array{id: int, message: string, created_at: string, admin_name: string}>>>
  */
-function get_all_suggestions_for_admin(): array
+function get_all_suggestions_for_admin(string $visibilityFilter = 'all'): array
 {
     $pdo = get_db_connection();
+
+    $filter = normalize_admin_suggestion_filter($visibilityFilter);
 
     $sql = 'SELECT 
                 s.id AS suggestion_id,
@@ -551,10 +566,28 @@ function get_all_suggestions_for_admin(): array
             FROM suggestions s
             INNER JOIN users student ON student.id = s.student_id
             LEFT JOIN suggestion_replies r ON r.suggestion_id = s.id
-            LEFT JOIN users admin ON admin.id = r.admin_id
-            ORDER BY s.created_at DESC, r.created_at ASC';
+            LEFT JOIN users admin ON admin.id = r.admin_id';
 
-    $rows = $pdo->query($sql)->fetchAll();
+    $conditions = [];
+    $params = [];
+
+    if ($filter === 'anonymous') {
+        $conditions[] = 's.is_anonymous = :is_anonymous_filter';
+        $params['is_anonymous_filter'] = 1;
+    } elseif ($filter === 'named') {
+        $conditions[] = 's.is_anonymous = :is_anonymous_filter';
+        $params['is_anonymous_filter'] = 0;
+    }
+
+    if (!empty($conditions)) {
+        $sql .= ' WHERE ' . implode(' AND ', $conditions);
+    }
+
+    $sql .= ' ORDER BY s.created_at DESC, r.created_at ASC';
+
+    $statement = $pdo->prepare($sql);
+    $statement->execute($params);
+    $rows = $statement->fetchAll();
 
     return format_suggestions_with_replies($rows, true);
 }

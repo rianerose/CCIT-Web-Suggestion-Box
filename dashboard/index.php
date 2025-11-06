@@ -3,45 +3,30 @@ require_once __DIR__ . '/../config.php';
 
 ensure_logged_in();
 
-if (!function_exists('format_suggestion_preview')) {
-    /**
-     * @param string $content
-     */
-    function format_suggestion_preview(string $content): string
+if (!function_exists('build_dashboard_index_url')) {
+    function build_dashboard_index_url(string $filter): string
     {
-        $normalized = preg_replace('/\s+/', ' ', $content);
-
-        if ($normalized === null) {
-            $normalized = $content;
-        }
-
-        $singleLine = trim($normalized);
-
-        if ($singleLine === '') {
-            return 'Suggestion';
-        }
-
-        $limit = 80;
-
-        if (function_exists('mb_strlen') && function_exists('mb_substr')) {
-            if (mb_strlen($singleLine) <= $limit) {
-                return $singleLine;
-            }
-
-            return rtrim(mb_substr($singleLine, 0, $limit - 3)) . '...';
-        }
-
-        if (strlen($singleLine) <= $limit) {
-            return $singleLine;
-        }
-
-        return rtrim(substr($singleLine, 0, $limit - 3)) . '...';
+        return $filter === 'all' ? 'index.php' : 'index.php?filter=' . urlencode($filter);
     }
 }
 
 /** @var array{id: int, username: string, full_name: string, role: string} $currentUser */
 $currentUser = $_SESSION['user'];
 $isAdmin = $currentUser['role'] === 'admin';
+
+$adminFilter = 'all';
+
+if ($isAdmin) {
+    $filterSource = null;
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['current_filter'])) {
+        $filterSource = (string) $_POST['current_filter'];
+    } elseif (isset($_GET['filter'])) {
+        $filterSource = (string) $_GET['filter'];
+    }
+
+    $adminFilter = normalize_admin_suggestion_filter($filterSource);
+}
 
 $flashSuccess = null;
 $flashError = null;
@@ -96,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            header('Location: index.php');
+            header('Location: ' . build_dashboard_index_url($adminFilter));
             exit;
         }
 
@@ -115,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            header('Location: index.php');
+            header('Location: ' . build_dashboard_index_url($adminFilter));
             exit;
         }
 
@@ -129,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($result['success']) {
                 $_SESSION['flash_success'] = 'Reply posted successfully.';
-                header('Location: index.php');
+                header('Location: ' . build_dashboard_index_url($adminFilter));
                 exit;
             }
 
@@ -214,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($isAdmin) {
-    $suggestions = get_all_suggestions_for_admin();
+    $suggestions = get_all_suggestions_for_admin($adminFilter);
 } else {
     $suggestions = get_student_suggestions($currentUser['id']);
 }
@@ -285,8 +270,9 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
   </style>
   <title>Dashboard</title>
 </head>
-<body>
-  <div class="dashboard">
+  <body>
+    <div class="dashboard"
+         data-role="<?= $isAdmin ? 'admin' : 'student' ?>"<?= $isAdmin ? ' data-filter="' . htmlspecialchars($adminFilter, ENT_QUOTES) . '"' : '' ?>>
     <header class="dashboard__header">
       <div class="dashboard__brand">
         <img src="../images/logo.png" alt="SuggestionBox Logo" width="120px">
@@ -321,6 +307,20 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
             <p class="panel__subtitle">Review student feedback and respond directly.</p>
           </header>
 
+            <div class="panel__toolbar">
+              <form class="suggestion-filter" method="get">
+                <label class="suggestion-filter__label" for="admin-filter">Show</label>
+                <select class="suggestion-filter__select" id="admin-filter" name="filter" onchange="this.form.submit()">
+                  <option value="all"<?= $adminFilter === 'all' ? ' selected' : '' ?>>All suggestions</option>
+                  <option value="anonymous"<?= $adminFilter === 'anonymous' ? ' selected' : '' ?>>Anonymous only</option>
+                  <option value="named"<?= $adminFilter === 'named' ? ' selected' : '' ?>>Named only</option>
+                </select>
+                <noscript>
+                  <button class="button button--ghost button--sm" type="submit">Apply</button>
+                </noscript>
+              </form>
+            </div>
+
           <?php if ($replyErrors): ?>
             <div class="alert alert--error">
               <?php foreach ($replyErrors as $error): ?>
@@ -332,22 +332,12 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
           <?php if (empty($suggestions)): ?>
             <p class="panel__empty">No suggestions yet. Check back soon.</p>
           <?php else: ?>
-            <div class="suggestion-grid">
-                <?php foreach ($suggestions as $suggestion): ?>
-                    <?php
-                        $suggestionId = (int) $suggestion['id'];
-                        $suggestionPreview = format_suggestion_preview($suggestion['content']);
-                    ?>
-                <article class="suggestion-card">
+              <div class="suggestion-grid">
+                  <?php foreach ($suggestions as $suggestion): ?>
+                      <?php $suggestionId = (int) $suggestion['id']; ?>
+                <article class="suggestion-card" data-suggestion-id="<?= $suggestionId ?>">
                   <header class="suggestion-card__header">
-                      <div class="suggestion-card__title-row">
-                          <h2 class="suggestion-card__title"><?= htmlspecialchars($suggestionPreview, ENT_QUOTES) ?></h2>
-                        <form class="inline-form" method="post" onsubmit="return confirm('Delete this suggestion and all associated replies?');">
-                          <input type="hidden" name="action" value="delete_suggestion">
-                          <input type="hidden" name="suggestion_id" value="<?= $suggestionId ?>">
-                          <button class="button button--danger button--sm" type="submit">Delete suggestion</button>
-                        </form>
-                      </div>
+                    <div class="suggestion-card__meta-row">
                       <span class="suggestion-card__meta">
                       <?php if ($suggestion['is_anonymous']): ?>
                         Submitted anonymously
@@ -357,32 +347,39 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                       <?php endif; ?>
                       &nbsp;&middot;&nbsp;<?= htmlspecialchars(date('M j, Y g:i A', strtotime($suggestion['created_at'])), ENT_QUOTES) ?>
                     </span>
+                      <form class="inline-form" method="post" onsubmit="return confirm('Delete this suggestion and all associated replies?');">
+                        <input type="hidden" name="action" value="delete_suggestion">
+                        <input type="hidden" name="suggestion_id" value="<?= $suggestionId ?>">
+                        <input type="hidden" name="current_filter" value="<?= htmlspecialchars($adminFilter, ENT_QUOTES) ?>">
+                        <button class="button button--danger button--sm" type="submit">Delete suggestion</button>
+                      </form>
+                    </div>
                   </header>
                   <p class="suggestion-card__body"><?= nl2br(htmlspecialchars($suggestion['content'], ENT_QUOTES)) ?></p>
 
-                  <?php if (!empty($suggestion['replies'])): ?>
-                    <div class="reply-thread">
-                      <?php foreach ($suggestion['replies'] as $reply): ?>
-                          <?php $replyId = (int) $reply['id']; ?>
-                        <div class="reply">
-                            <div class="reply__meta">
-                            <span class="reply__author">Reply from <?= htmlspecialchars($reply['admin_name'], ENT_QUOTES) ?></span>
-                            <span class="reply__date"><?= htmlspecialchars(date('M j, Y g:i A', strtotime($reply['created_at'])), ENT_QUOTES) ?></span>
-                              <form class="inline-form reply__delete" method="post" onsubmit="return confirm('Delete this reply?');">
-                                <input type="hidden" name="action" value="delete_reply">
-                                <input type="hidden" name="reply_id" value="<?= $replyId ?>">
-                                <button class="button button--danger button--sm" type="submit">Delete reply</button>
-                              </form>
-                          </div>
-                          <p class="reply__message"><?= nl2br(htmlspecialchars($reply['message'], ENT_QUOTES)) ?></p>
+                  <div class="reply-thread" data-replies-for="<?= $suggestionId ?>">
+                    <?php foreach ($suggestion['replies'] as $reply): ?>
+                        <?php $replyId = (int) $reply['id']; ?>
+                      <div class="reply">
+                        <div class="reply__meta">
+                          <span class="reply__author">Reply from <?= htmlspecialchars($reply['admin_name'], ENT_QUOTES) ?></span>
+                          <span class="reply__date"><?= htmlspecialchars(date('M j, Y g:i A', strtotime($reply['created_at'])), ENT_QUOTES) ?></span>
+                          <form class="inline-form reply__delete" method="post" onsubmit="return confirm('Delete this reply?');">
+                            <input type="hidden" name="action" value="delete_reply">
+                            <input type="hidden" name="reply_id" value="<?= $replyId ?>">
+                            <input type="hidden" name="current_filter" value="<?= htmlspecialchars($adminFilter, ENT_QUOTES) ?>">
+                            <button class="button button--danger button--sm" type="submit">Delete reply</button>
+                          </form>
                         </div>
-                      <?php endforeach; ?>
-                    </div>
-                  <?php endif; ?>
+                        <p class="reply__message"><?= nl2br(htmlspecialchars($reply['message'], ENT_QUOTES)) ?></p>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
 
                   <form class="reply-form" method="post" novalidate>
-                      <input type="hidden" name="action" value="add_reply">
-                    <input type="hidden" name="suggestion_id" value="<?= (int) $suggestion['id'] ?>">
+                    <input type="hidden" name="action" value="add_reply">
+                    <input type="hidden" name="suggestion_id" value="<?= $suggestionId ?>">
+                    <input type="hidden" name="current_filter" value="<?= htmlspecialchars($adminFilter, ENT_QUOTES) ?>">
                     <label class="form-field">
                       <span class="form-field__label">Add a reply</span>
                       <textarea
@@ -395,7 +392,7 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                   </form>
                 </article>
               <?php endforeach; ?>
-            </div>
+              </div>
           <?php endif; ?>
         </section>
       <?php else: ?>
@@ -448,39 +445,39 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
             <?php if (empty($suggestions)): ?>
               <p class="panel__empty">You have not shared any suggestions yet.</p>
             <?php else: ?>
-              <div class="suggestion-list">
-                  <?php foreach ($suggestions as $suggestion): ?>
-                      <?php
-                        $studentSuggestionId = (int) $suggestion['id'];
-                        $isEditing = $editingSuggestionId === $studentSuggestionId;
-                        $editDraft = $editSuggestionDrafts[$studentSuggestionId] ?? null;
-                        if ($isEditing && $editDraft === null) {
-                            $editDraft = [
-                                'content' => $suggestion['content'],
-                                'display_identity' => !$suggestion['is_anonymous'],
-                            ];
-                        }
-                        $editErrors = $editSuggestionErrors[$studentSuggestionId] ?? [];
-                        $suggestionPreview = format_suggestion_preview($suggestion['content']);
-                      ?>
-                  <article class="suggestion-card">
+                <div class="suggestion-list">
+                    <?php foreach ($suggestions as $suggestion): ?>
+                        <?php
+                          $studentSuggestionId = (int) $suggestion['id'];
+                          $isEditing = $editingSuggestionId === $studentSuggestionId;
+                          $editDraft = $editSuggestionDrafts[$studentSuggestionId] ?? null;
+                          if ($isEditing && $editDraft === null) {
+                              $editDraft = [
+                                  'content' => $suggestion['content'],
+                                  'display_identity' => !$suggestion['is_anonymous'],
+                              ];
+                          }
+                          $editErrors = $editSuggestionErrors[$studentSuggestionId] ?? [];
+                        ?>
+                  <article class="suggestion-card" data-suggestion-id="<?= $studentSuggestionId ?>">
                     <header class="suggestion-card__header">
-                        <h3 class="suggestion-card__title"><?= htmlspecialchars($suggestionPreview, ENT_QUOTES) ?></h3>
-                      <span class="suggestion-card__meta">
-                        <?= $suggestion['is_anonymous'] ? 'Sent anonymously' : 'Name shared with admins' ?>
-                        &nbsp;&middot;&nbsp;<?= htmlspecialchars(date('M j, Y g:i A', strtotime($suggestion['created_at'])), ENT_QUOTES) ?>
-                      </span>
-                    </header>
-                      <div class="suggestion-card__actions suggestion-card__actions--student">
-                        <a class="button button--ghost button--sm" href="<?= htmlspecialchars($isEditing ? 'index.php' : 'index.php?edit=' . $studentSuggestionId, ENT_QUOTES) ?>">
-                          <?= $isEditing ? 'Close edit' : 'Edit' ?>
-                        </a>
-                        <form class="inline-form" method="post" onsubmit="return confirm('Delete this suggestion? This action cannot be undone.');">
-                          <input type="hidden" name="action" value="delete_suggestion">
-                          <input type="hidden" name="suggestion_id" value="<?= $studentSuggestionId ?>">
-                          <button class="button button--danger button--sm" type="submit">Delete</button>
-                        </form>
+                      <div class="suggestion-card__meta-row">
+                        <span class="suggestion-card__meta">
+                          <?= $suggestion['is_anonymous'] ? 'Sent anonymously' : 'Name shared with admins' ?>
+                          &nbsp;&middot;&nbsp;<?= htmlspecialchars(date('M j, Y g:i A', strtotime($suggestion['created_at'])), ENT_QUOTES) ?>
+                        </span>
+                        <div class="suggestion-card__actions suggestion-card__actions--student">
+                          <a class="button button--ghost button--sm" href="<?= htmlspecialchars($isEditing ? 'index.php' : 'index.php?edit=' . $studentSuggestionId, ENT_QUOTES) ?>">
+                            <?= $isEditing ? 'Close edit' : 'Edit' ?>
+                          </a>
+                          <form class="inline-form" method="post" onsubmit="return confirm('Delete this suggestion? This action cannot be undone.');">
+                            <input type="hidden" name="action" value="delete_suggestion">
+                            <input type="hidden" name="suggestion_id" value="<?= $studentSuggestionId ?>">
+                            <button class="button button--danger button--sm" type="submit">Delete</button>
+                          </form>
+                        </div>
                       </div>
+                    </header>
                       <?php if ($isEditing): ?>
                         <?php if (!empty($editErrors)): ?>
                           <div class="alert alert--error">
@@ -516,29 +513,194 @@ $username = htmlspecialchars($currentUser['full_name'], ENT_QUOTES);
                       <?php endif; ?>
                     <p class="suggestion-card__body"><?= nl2br(htmlspecialchars($suggestion['content'], ENT_QUOTES)) ?></p>
 
-                    <?php if (!empty($suggestion['replies'])): ?>
-                      <div class="reply-thread">
-                        <?php foreach ($suggestion['replies'] as $reply): ?>
-                          <div class="reply reply--student">
-                            <div class="reply__meta">
-                              <span class="reply__author">Response from <?= htmlspecialchars($reply['admin_name'], ENT_QUOTES) ?></span>
-                              <span class="reply__date"><?= htmlspecialchars(date('M j, Y g:i A', strtotime($reply['created_at'])), ENT_QUOTES) ?></span>
-                            </div>
-                            <p class="reply__message"><?= nl2br(htmlspecialchars($reply['message'], ENT_QUOTES)) ?></p>
+                    <div class="reply-thread" data-replies-for="<?= $studentSuggestionId ?>">
+                      <?php foreach ($suggestion['replies'] as $reply): ?>
+                        <div class="reply reply--student">
+                          <div class="reply__meta">
+                            <span class="reply__author">Response from <?= htmlspecialchars($reply['admin_name'], ENT_QUOTES) ?></span>
+                            <span class="reply__date"><?= htmlspecialchars(date('M j, Y g:i A', strtotime($reply['created_at'])), ENT_QUOTES) ?></span>
                           </div>
-                        <?php endforeach; ?>
-                      </div>
-                    <?php else: ?>
-                      <p class="suggestion-card__status">Awaiting administrator reply.</p>
-                    <?php endif; ?>
+                          <p class="reply__message"><?= nl2br(htmlspecialchars($reply['message'], ENT_QUOTES)) ?></p>
+                        </div>
+                      <?php endforeach; ?>
+                    </div>
+                    <p class="suggestion-card__status" data-empty-state-for="<?= $studentSuggestionId ?>"<?= !empty($suggestion['replies']) ? ' hidden' : '' ?>>Awaiting administrator reply.</p>
                   </article>
                 <?php endforeach; ?>
-              </div>
+                </div>
             <?php endif; ?>
           </div>
         </section>
-      <?php endif; ?>
-    </main>
-  </div>
+        <?php endif; ?>
+      </main>
+      <script>
+        (function () {
+          var dashboard = document.querySelector('.dashboard');
+          if (!dashboard) {
+            return;
+          }
+
+          var role = dashboard.getAttribute('data-role') || 'student';
+          var filter = dashboard.getAttribute('data-filter') || 'all';
+
+          var cards = dashboard.querySelectorAll('[data-suggestion-id]');
+          if (!cards.length) {
+            return;
+          }
+
+          var suggestionMap = {};
+          for (var i = 0; i < cards.length; i += 1) {
+            var card = cards[i];
+            var suggestionId = card.getAttribute('data-suggestion-id');
+
+            if (!suggestionId) {
+              continue;
+            }
+
+            suggestionMap[suggestionId] = {
+              card: card,
+              replies: card.querySelector('[data-replies-for]'),
+              emptyState: card.querySelector('[data-empty-state-for]')
+            };
+          }
+
+          var mapKeys = Object.keys(suggestionMap);
+          if (!mapKeys.length) {
+            return;
+          }
+
+          function escapeHtml(value) {
+            return String(value)
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#039;');
+          }
+
+          function formatMessage(message) {
+            return escapeHtml(message).replace(/\r?\n/g, '<br>');
+          }
+
+          function renderAdminReply(reply) {
+            var currentFilter = filter || 'all';
+
+            return '' +
+              '<div class="reply" data-reply-id="' + reply.id + '">' +
+                '<div class="reply__meta">' +
+                  '<span class="reply__author">Reply from ' + escapeHtml(reply.admin_name) + '</span>' +
+                  '<span class="reply__date">' + escapeHtml(reply.created_at_human) + '</span>' +
+                  '<form class="inline-form reply__delete" method="post" onsubmit="return confirm(\'Delete this reply?\');">' +
+                    '<input type="hidden" name="action" value="delete_reply">' +
+                    '<input type="hidden" name="reply_id" value="' + reply.id + '">' +
+                    '<input type="hidden" name="current_filter" value="' + escapeHtml(currentFilter) + '">' +
+                    '<button class="button button--danger button--sm" type="submit">Delete reply</button>' +
+                  '</form>' +
+                '</div>' +
+                '<p class="reply__message">' + formatMessage(reply.message) + '</p>' +
+              '</div>';
+          }
+
+          function renderStudentReply(reply) {
+            return '' +
+              '<div class="reply reply--student">' +
+                '<div class="reply__meta">' +
+                  '<span class="reply__author">Response from ' + escapeHtml(reply.admin_name) + '</span>' +
+                  '<span class="reply__date">' + escapeHtml(reply.created_at_human) + '</span>' +
+                '</div>' +
+                '<p class="reply__message">' + formatMessage(reply.message) + '</p>' +
+              '</div>';
+          }
+
+          var isFetching = false;
+          var pollDelay = 10000;
+
+          function scheduleNextPoll(delay) {
+            window.setTimeout(poll, delay);
+          }
+
+          function updateCard(suggestion) {
+            var key = String(suggestion.id);
+            var entry = suggestionMap[key];
+
+            if (!entry || !entry.replies) {
+              return;
+            }
+
+            var repliesHtml = '';
+
+            if (Array.isArray(suggestion.replies) && suggestion.replies.length) {
+              var rendered = [];
+              for (var j = 0; j < suggestion.replies.length; j += 1) {
+                var reply = suggestion.replies[j];
+                if (role === 'admin') {
+                  rendered.push(renderAdminReply(reply));
+                } else {
+                  rendered.push(renderStudentReply(reply));
+                }
+              }
+
+              repliesHtml = rendered.join('');
+            }
+
+            entry.replies.innerHTML = repliesHtml;
+
+            if (entry.emptyState) {
+              if (Array.isArray(suggestion.replies) && suggestion.replies.length) {
+                entry.emptyState.setAttribute('hidden', 'hidden');
+              } else {
+                entry.emptyState.removeAttribute('hidden');
+              }
+            }
+          }
+
+          function poll() {
+            if (isFetching) {
+              scheduleNextPoll(pollDelay);
+              return;
+            }
+
+            isFetching = true;
+
+            var params = 't=' + Date.now();
+            if (role === 'admin' && filter) {
+              params += '&filter=' + encodeURIComponent(filter);
+            }
+
+            fetch('fetch_suggestions.php?' + params, {
+              credentials: 'same-origin',
+              headers: {
+                'Accept': 'application/json'
+              }
+            })
+              .then(function (response) {
+                if (!response.ok) {
+                  throw new Error('Network response was not ok');
+                }
+
+                return response.json();
+              })
+              .then(function (payload) {
+                if (!payload || !payload.success || !Array.isArray(payload.suggestions)) {
+                  return;
+                }
+
+                for (var k = 0; k < payload.suggestions.length; k += 1) {
+                  updateCard(payload.suggestions[k]);
+                }
+              })
+              .catch(function (error) {
+                console.error('Suggestion polling error:', error);
+              })
+              .then(function () {
+                isFetching = false;
+                scheduleNextPoll(pollDelay);
+              });
+          }
+
+          scheduleNextPoll(3000);
+        })();
+      </script>
+    </div>
 </body>
 </html>
